@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from app.api.v1.routes import product
+from app.api.v1.routes import api_router
 
 
 app = FastAPI(
@@ -9,6 +9,6 @@ app = FastAPI(
 )
 
 app.include_router(
-    product.router,
+    api_router,
     prefix="/api/v1"
 )
