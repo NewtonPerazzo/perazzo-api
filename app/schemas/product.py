@@ -3,6 +3,8 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 from uuid import UUID
 
+from app.schemas.category import CategoryResponse
+
 
 class ProductCreate(BaseModel):
 
@@ -15,6 +17,8 @@ class ProductCreate(BaseModel):
   stock: Optional[int] = Field(default=None, ge=0)
 
   image_url: Optional[str] = None
+
+  category_ids: list[UUID] = Field(default_factory=list)
 
 
 class ProductUpdate(BaseModel):
@@ -29,6 +33,8 @@ class ProductUpdate(BaseModel):
 
   image_url: Optional[str] = None
 
+  category_ids: Optional[list[UUID]] = None
+
 class ProductResponse(BaseModel):
 
   id: UUID
@@ -38,6 +44,7 @@ class ProductResponse(BaseModel):
   description: Optional[str]
   stock: Optional[int]
   image_url: Optional[str]
+  categories: list[CategoryResponse]
 
   is_active: bool
   created_at: datetime
