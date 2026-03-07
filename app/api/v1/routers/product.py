@@ -1,3 +1,4 @@
+import uuid
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -71,7 +72,7 @@ def get_product(
   response_model=ProductResponse
 )
 def update_product(
-  product_id: int,
+  product_id: uuid.UUID,
   data: ProductUpdate,
   db: Session = Depends(get_db)
 ):
@@ -94,7 +95,7 @@ def update_product(
   status_code=status.HTTP_204_NO_CONTENT
 )
 def delete_product(
-  product_id: int,
+  product_id: uuid.UUID,
   db: Session = Depends(get_db)
 ):
   service = ProductService(db)

@@ -1,4 +1,6 @@
+import uuid
 from sqlalchemy import String, Float, Integer, Text
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 from app.domain.models.base import TimestampMixin, ActiveMixin
@@ -8,7 +10,7 @@ class Product(Base, TimestampMixin, ActiveMixin):
 
     __tablename__ = "products"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     slug: Mapped[str] = mapped_column(
       String(140),
       unique=True,

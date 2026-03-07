@@ -1,3 +1,4 @@
+import uuid
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from typing import Optional
@@ -57,7 +58,7 @@ class UserService:
       return result.scalar_one_or_none()
 
 
-  def get_by_id(self, user_id: int) -> Optional[User]:
+  def get_by_id(self, user_id: uuid.UUID) -> Optional[User]:
 
       stmt = select(User).where(User.id == user_id)
       result = self.db.execute(stmt)
