@@ -1,9 +1,12 @@
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, DeclarativeBase
+from sqlalchemy.orm import declarative_base, sessionmaker
 
-DATABASE_URL = "postgresql://postgres:kytetecnologia@localhost:5432/perazzo_db"
+from app.core.config import settings
 
-engine = create_engine(DATABASE_URL)
+engine = create_engine(
+    settings.DATABASE_URL,
+    pool_pre_ping=True
+)
 
 SessionLocal = sessionmaker(
     autocommit=False,
@@ -11,11 +14,8 @@ SessionLocal = sessionmaker(
     bind=engine
 )
 
-class Base(DeclarativeBase):
-    pass
+Base = declarative_base()
 
-from sqlalchemy.orm import Session
-from app.core.database import SessionLocal
 
 def get_db():
     db = SessionLocal()
