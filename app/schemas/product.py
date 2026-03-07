@@ -1,6 +1,7 @@
 from typing import Optional
 from pydantic import BaseModel, Field
 from datetime import datetime
+from uuid import UUID
 
 
 class ProductCreate(BaseModel):
@@ -30,7 +31,7 @@ class ProductUpdate(BaseModel):
 
 class ProductResponse(BaseModel):
 
-  id: int
+  id: UUID
   slug: str
   name: str
   price: float

@@ -1,12 +1,12 @@
+import uuid
 from typing import Optional, List
 
 from sqlalchemy.orm import Session
 from sqlalchemy import select
-from slugify import slugify
 
 from app.domain.models.product import Product
 from app.schemas.product import ProductCreate, ProductUpdate
-
+from app.util.slug import generate_unique_slug
 
 class ProductService:
 
@@ -14,7 +14,7 @@ class ProductService:
     self.db = db
 
 
-  def get_by_id(self, product_id: int) -> Optional[Product]:
+  def get_by_id(self, product_id: uuid.UUID) -> Optional[Product]:
     stmt = select(Product).where(Product.id == product_id)
     result = self.db.execute(stmt).scalar_one_or_none()
     return result
@@ -39,7 +39,7 @@ class ProductService:
 
   def create(self, data: ProductCreate) -> Product:
 
-    slug = self._generate_unique_slug(data.name)
+    slug = generate_unique_slug(data.name, self.get_by_slug)
 
     product = Product(
       name=data.name,
@@ -60,7 +60,7 @@ class ProductService:
   def update(self, product: Product, data: ProductUpdate) -> Product:
 
     if data.name and data.name != product.name:
-        product.slug = self._generate_unique_slug(data.name)
+        product.slug = generate_unique_slug(data.name, self.get_by_slug)
 
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(product, field, value)
@@ -74,16 +74,3 @@ class ProductService:
   def delete(self, product: Product) -> None:
     self.db.delete(product)
     self.db.commit()
-
-
-  def _generate_unique_slug(self, name: str) -> str:
-
-    base_slug = slugify(name)
-    slug = base_slug
-    counter = 1
-
-    while self.get_by_slug(slug):
-      slug = f"{base_slug}-{counter}"
-      counter += 1
-
-    return slug

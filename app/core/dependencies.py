@@ -1,5 +1,7 @@
+import uuid
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from jose import JWTError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -13,7 +15,10 @@ def get_current_user(
     db: Session = Depends(get_db)
 ):
     token_str = credentials.credentials
-    payload = decode_access_token(token_str)
+    try:
+        payload = decode_access_token(token_str)
+    except JWTError:
+        payload = None
 
     if not payload:
         raise HTTPException(
@@ -29,8 +34,16 @@ def get_current_user(
             detail="Invalid token payload"
         )
 
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload"
+        )
+
     service = UserService(db)
-    user = service.get_by_id(int(user_id))
+    user = service.get_by_id(user_uuid)
 
     if not user:
         raise HTTPException(
