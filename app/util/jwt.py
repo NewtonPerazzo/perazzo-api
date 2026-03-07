@@ -1,61 +1,57 @@
-from datetime import datetime, timedelta
-from jose import jwt, JWTError, ExpiredSignatureError
-from typing import Optional
-from fastapi import HTTPException, status
+from datetime import datetime, timedelta, timezone
+from jose import jwt, JWTError
 
-SECRET_KEY = "CHANGE_THIS_SECRET"
-EMAIL_SECRET_KEY = "CHANGE_THIS_SECRET_FOR_EMAIL"
-RESET_SECRET_KEY = "CHANGE_THIS_SECRET_FOR_RESET"
-
-ALGORITHM = "HS256"
-ACCESS_EXPIRE_MINUTES = 60
-EMAIL_EXPIRE_MINUTES = 60 * 24
-RESET_EXPIRE_MINUTES = 15
+from app.core.config import settings
 
 
-def create_access_token(data: dict) -> str:
+def _create_token(data: dict, secret: str, expires_minutes: int) -> str:
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_EXPIRE_MINUTES)
+    expire = datetime.now(timezone.utc) + timedelta(minutes=expires_minutes)
     to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(to_encode, secret, algorithm=settings.ALGORITHM)
 
 
-def decode_token(token: str) -> Optional[dict]:
+def _decode_token(token: str, secret: str) -> dict:
     try:
-        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-    except ExpiredSignatureError:
-        return None
-    except JWTError:
-        return None
+        return jwt.decode(token, secret, algorithms=[settings.ALGORITHM])
+    except JWTError as e:
+        raise e
 
 
-def create_password_reset_token(user_id: int) -> str:
-    expire = datetime.utcnow() + timedelta(minutes=RESET_EXPIRE_MINUTES)
-    payload = {"sub": str(user_id), "exp": expire}
-    return jwt.encode(payload, RESET_SECRET_KEY, algorithm=ALGORITHM)
+# -------- ACCESS TOKEN (login) --------
+def create_access_token(data: dict) -> str:
+    return _create_token(
+        data=data,
+        secret=settings.SECRET_KEY,
+        expires_minutes=settings.ACCESS_EXPIRE_MINUTES,
+    )
 
 
-def decode_password_reset_token(token: str) -> int:
-    try:
-        payload = jwt.decode(token, RESET_SECRET_KEY, algorithms=[ALGORITHM])
-        return int(payload.get("sub"))
-    except ExpiredSignatureError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Token expired")
-    except JWTError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid token")
+def decode_access_token(token: str) -> dict:
+    return _decode_token(token, settings.SECRET_KEY)
 
 
-def create_email_verification_token(user_id: int) -> str:
-    expire = datetime.utcnow() + timedelta(minutes=EMAIL_EXPIRE_MINUTES)
-    payload = {"sub": str(user_id), "exp": expire}
-    return jwt.encode(payload, EMAIL_SECRET_KEY, algorithm=ALGORITHM)
+# -------- EMAIL VERIFICATION TOKEN --------
+def create_email_verification_token(data: dict) -> str:
+    return _create_token(
+        data=data,
+        secret=settings.EMAIL_SECRET_KEY,
+        expires_minutes=settings.EMAIL_EXPIRE_MINUTES,
+    )
 
 
-def decode_email_verification_token(token: str) -> int:
-    try:
-        payload = jwt.decode(token, EMAIL_SECRET_KEY, algorithms=[ALGORITHM])
-        return int(payload.get("sub"))
-    except ExpiredSignatureError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Token expired")
-    except JWTError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid token")
+def decode_email_verification_token(token: str) -> dict:
+    return _decode_token(token, settings.EMAIL_SECRET_KEY)
+
+
+# -------- PASSWORD RESET TOKEN --------
+def create_password_reset_token(data: dict) -> str:
+    return _create_token(
+        data=data,
+        secret=settings.RESET_SECRET_KEY,
+        expires_minutes=settings.RESET_EXPIRE_MINUTES,
+    )
+
+
+def decode_password_reset_token(token: str) -> dict:
+    return _decode_token(token, settings.RESET_SECRET_KEY)
