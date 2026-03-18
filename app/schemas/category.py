@@ -22,6 +22,11 @@ class CategoryResponse(BaseModel):
     name: str
     slug: str
     description: str | None
+    sort_order: int
 
     class Config:
         from_attributes = True
+
+
+class CategoryReorderRequest(BaseModel):
+    category_ids: list[UUID] = Field(default_factory=list)

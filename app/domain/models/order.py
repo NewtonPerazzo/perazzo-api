@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -30,6 +30,7 @@ class Order(Base):
     is_to_deliver: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", index=True)
     payment_method: Mapped[str] = mapped_column(String(60), nullable=False)
+    observation: Mapped[str | None] = mapped_column(Text, nullable=True)
     total_price: Mapped[float] = mapped_column(Float, nullable=False, default=0)
 
     created_at: Mapped[datetime] = mapped_column(

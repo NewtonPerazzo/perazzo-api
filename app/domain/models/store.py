@@ -30,6 +30,7 @@ class Store(Base):
     color: Mapped[str | None] = mapped_column(String(30), nullable=True)
 
     has_catalog_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_accepted_send_order_to_whatsapp: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

@@ -22,6 +22,7 @@ class StoreCreate(BaseModel):
     color: str | None = None
 
     has_catalog_active: bool = False
+    is_accepted_send_order_to_whatsapp: bool = False
 
 
 class StoreUpdate(BaseModel):
@@ -43,6 +44,7 @@ class StoreUpdate(BaseModel):
     color: str | None = None
 
     has_catalog_active: bool | None = None
+    is_accepted_send_order_to_whatsapp: bool | None = None
 
 
 class StoreResponse(BaseModel):
@@ -65,6 +67,7 @@ class StoreResponse(BaseModel):
     color: str | None
 
     has_catalog_active: bool
+    is_accepted_send_order_to_whatsapp: bool
 
     user_id: UUID
     created_at: datetime

@@ -29,6 +29,7 @@ class OrderCreate(BaseModel):
     is_to_deliver: bool = False
     delivery_method_id: UUID | None = None
     payment_method: str = Field(..., min_length=1, max_length=60)
+    observation: str | None = None
 
 
 class OrderUpdate(OrderCreate):
@@ -58,6 +59,7 @@ class OrderResponse(BaseModel):
     delivery_method: DeliveryMethodResponse | None
     status: OrderStatus
     payment_method: str
+    observation: str | None
     total_price: float
     created_at: datetime
     updated_at: datetime

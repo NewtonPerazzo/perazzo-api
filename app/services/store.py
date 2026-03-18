@@ -36,6 +36,7 @@ class StoreService:
       logo=data.logo,
       color=data.color,
       has_catalog_active=data.has_catalog_active,
+      is_accepted_send_order_to_whatsapp=data.is_accepted_send_order_to_whatsapp,
       user_id=current_user.id
     )
 

@@ -47,6 +47,7 @@ class OrderService:
             delivery_method_id=delivery_method.id if delivery_method else None,
             status="pending",
             payment_method=data.payment_method,
+            observation=data.observation,
             total_price=0,
         )
 
@@ -70,6 +71,7 @@ class OrderService:
         order.is_to_deliver = data.is_to_deliver
         order.delivery_method_id = delivery_method.id if delivery_method else None
         order.payment_method = data.payment_method
+        order.observation = data.observation
         order.total_price = self._calculate_total_price(items_total, delivery_method)
         order.items = order_items
 
@@ -192,6 +194,7 @@ class OrderService:
             "delivery_method": order.delivery_method,
             "status": order.status,
             "payment_method": order.payment_method,
+            "observation": order.observation,
             "total_price": order.total_price,
             "created_at": order.created_at,
             "updated_at": order.updated_at,

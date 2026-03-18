@@ -45,9 +45,13 @@ class ProductService:
     limit: int = 20,
     search: str | None = None,
     category_id: uuid.UUID | None = None,
+    uncategorized: bool = False,
+    sort_by: str | None = "created_at",
+    sort_order: str | None = "desc",
   ) -> List[Product]:
     stmt = select(Product).options(selectinload(Product.categories))
-    stmt = self._apply_filters(stmt, search=search, category_id=category_id)
+    stmt = self._apply_filters(stmt, search=search, category_id=category_id, uncategorized=uncategorized)
+    stmt = self._apply_sorting(stmt, sort_by=sort_by, sort_order=sort_order)
     stmt = stmt.offset(skip).limit(limit)
 
     result = self.db.execute(stmt).scalars().all()
@@ -58,9 +62,10 @@ class ProductService:
     self,
     search: str | None = None,
     category_id: uuid.UUID | None = None,
+    uncategorized: bool = False,
   ) -> int:
     stmt = select(func.count(Product.id))
-    stmt = self._apply_filters(stmt, search=search, category_id=category_id)
+    stmt = self._apply_filters(stmt, search=search, category_id=category_id, uncategorized=uncategorized)
 
     result = self.db.execute(stmt).scalar_one()
     return int(result)
@@ -112,7 +117,7 @@ class ProductService:
     self.db.commit()
 
 
-  def _apply_filters(self, stmt, search: str | None, category_id: uuid.UUID | None):
+  def _apply_filters(self, stmt, search: str | None, category_id: uuid.UUID | None, uncategorized: bool = False):
     stmt = stmt.where(Product.is_active.is_(True))
 
     if search:
@@ -124,10 +129,21 @@ class ProductService:
         )
       )
 
-    if category_id:
+    if uncategorized:
+      stmt = stmt.where(~Product.categories.any())
+    elif category_id:
       stmt = stmt.where(Product.categories.any(Category.id == category_id))
 
     return stmt
+
+
+  def _apply_sorting(self, stmt, sort_by: str | None, sort_order: str | None):
+    descending = (sort_order or "desc").lower() != "asc"
+    if sort_by == "name":
+      return stmt.order_by(Product.name.desc() if descending else Product.name.asc())
+    if sort_by == "price":
+      return stmt.order_by(Product.price.desc() if descending else Product.price.asc())
+    return stmt.order_by(Product.created_at.desc() if descending else Product.created_at.asc())
 
 
   def _get_categories_by_ids(self, category_ids: Optional[List[uuid.UUID]]) -> List[Category]:
