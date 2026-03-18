@@ -3,13 +3,15 @@ from typing import Optional, List
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import select, or_, func, delete
 from sqlalchemy.orm import selectinload
 
+from app.domain.models.cart_item import CartItem
 from app.domain.models.category import Category
 from app.domain.models.product import Product
 from app.schemas.product import ProductCreate, ProductUpdate
 from app.util.slug import generate_unique_slug
+
 
 class ProductService:
 
@@ -37,16 +39,31 @@ class ProductService:
       return result
 
 
-  def list(self, skip: int = 0, limit: int = 20) -> List[Product]:
-    stmt = (
-      select(Product)
-      .options(selectinload(Product.categories))
-      .offset(skip)
-      .limit(limit)
-    )
+  def list(
+    self,
+    skip: int = 0,
+    limit: int = 20,
+    search: str | None = None,
+    category_id: uuid.UUID | None = None,
+  ) -> List[Product]:
+    stmt = select(Product).options(selectinload(Product.categories))
+    stmt = self._apply_filters(stmt, search=search, category_id=category_id)
+    stmt = stmt.offset(skip).limit(limit)
 
     result = self.db.execute(stmt).scalars().all()
     return result
+
+
+  def count(
+    self,
+    search: str | None = None,
+    category_id: uuid.UUID | None = None,
+  ) -> int:
+    stmt = select(func.count(Product.id))
+    stmt = self._apply_filters(stmt, search=search, category_id=category_id)
+
+    result = self.db.execute(stmt).scalar_one()
+    return int(result)
 
 
   def create(self, data: ProductCreate) -> Product:
@@ -90,8 +107,27 @@ class ProductService:
 
 
   def delete(self, product: Product) -> None:
-    self.db.delete(product)
+    product.is_active = False
+    self.db.execute(delete(CartItem).where(CartItem.product_id == product.id))
     self.db.commit()
+
+
+  def _apply_filters(self, stmt, search: str | None, category_id: uuid.UUID | None):
+    stmt = stmt.where(Product.is_active.is_(True))
+
+    if search:
+      search_term = f"%{search}%"
+      stmt = stmt.where(
+        or_(
+          Product.name.ilike(search_term),
+          Product.description.ilike(search_term)
+        )
+      )
+
+    if category_id:
+      stmt = stmt.where(Product.categories.any(Category.id == category_id))
+
+    return stmt
 
 
   def _get_categories_by_ids(self, category_ids: Optional[List[uuid.UUID]]) -> List[Category]:

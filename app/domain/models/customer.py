@@ -15,6 +15,7 @@ class Customer(Base):
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     phone: Mapped[str] = mapped_column(String(30), nullable=False)
     address: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    neighborhood: Mapped[str | None] = mapped_column(String(120), nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

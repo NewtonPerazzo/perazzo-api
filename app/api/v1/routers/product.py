@@ -1,8 +1,9 @@
 import uuid
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.core.database import get_db
 from app.schemas.product import ProductCreate, ProductUpdate, ProductResponse
@@ -37,12 +38,18 @@ def create_product(
   response_model=List[ProductResponse]
 )
 def list_products(
+  response: Response,
   skip: int = 0,
   limit: int = 20,
+  search: str | None = None,
+  category_id: uuid.UUID | None = None,
   db: Session = Depends(get_db)
 ):
     service = ProductService(db)
-    products = service.list(skip=skip, limit=limit)
+    total = service.count(search=search, category_id=category_id)
+    products = service.list(skip=skip, limit=limit, search=search, category_id=category_id)
+
+    response.headers["X-Total-Count"] = str(total)
 
     return products
 
@@ -106,6 +113,13 @@ def delete_product(
       status_code=status.HTTP_404_NOT_FOUND,
       detail="Product not found"
     )
-  service.delete(product)
+  try:
+    service.delete(product)
+  except IntegrityError:
+    db.rollback()
+    raise HTTPException(
+      status_code=status.HTTP_409_CONFLICT,
+      detail="Product cannot be deleted because it is linked to existing orders"
+    )
 
   return None

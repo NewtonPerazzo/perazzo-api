@@ -15,6 +15,12 @@ class StoreRepository:
 
     return store
 
+  def update(self, store: Store):
+    self.db.commit()
+    self.db.refresh(store)
+
+    return store
+
   def get_by_slug(self, slug: str):
     return self.db.query(Store).filter(Store.slug == slug).first()
 

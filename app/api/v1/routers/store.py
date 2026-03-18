@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
-from app.schemas.store import StoreCreate, StoreResponse
+from app.schemas.store import StoreCreate, StoreResponse, StoreUpdate
 from app.services.store import StoreService
 
 router = APIRouter(
@@ -27,6 +27,27 @@ def create_store(
   store = service.create(data, current_user)
 
   return store
+
+
+@router.patch(
+  "/me",
+  response_model=StoreResponse
+)
+def update_my_store(
+  data: StoreUpdate,
+  db: Session = Depends(get_db),
+  current_user = Depends(get_current_user)
+):
+  service = StoreService(db)
+  store = service.get_by_user_id(current_user.id)
+
+  if not store:
+    raise HTTPException(
+      status_code=status.HTTP_404_NOT_FOUND,
+      detail="Store not found"
+    )
+
+  return service.update(store, data)
 
 
 @router.get(

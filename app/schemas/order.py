@@ -1,10 +1,15 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
 from app.schemas.customer import CustomerCreate, CustomerResponse
+from app.schemas.delivery_method import DeliveryMethodResponse
 from app.schemas.product import ProductResponse
+
+
+OrderStatus = Literal["confirmed", "canceled", "preparing", "in_transit", "pending", "deliveried"]
 
 
 class ProductOrderCreate(BaseModel):
@@ -22,7 +27,26 @@ class OrderCreate(BaseModel):
     products: list[ProductOrderCreate] = Field(..., min_length=1)
     customer: CustomerCreate
     is_to_deliver: bool = False
+    delivery_method_id: UUID | None = None
     payment_method: str = Field(..., min_length=1, max_length=60)
+
+
+class OrderUpdate(OrderCreate):
+    pass
+
+
+class OrderStatusUpdate(BaseModel):
+    status: OrderStatus
+
+
+class OrderTotalPreviewRequest(BaseModel):
+    products: list[ProductOrderCreate] = Field(default_factory=list)
+    is_to_deliver: bool = False
+    delivery_method_id: UUID | None = None
+
+
+class OrderTotalPreviewResponse(BaseModel):
+    total_price: float
 
 
 class OrderResponse(BaseModel):
@@ -31,6 +55,8 @@ class OrderResponse(BaseModel):
     products: list[ProductOrderResponse]
     customer: CustomerResponse
     is_to_deliver: bool
+    delivery_method: DeliveryMethodResponse | None
+    status: OrderStatus
     payment_method: str
     total_price: float
     created_at: datetime

@@ -20,8 +20,15 @@ class Order(Base):
         nullable=False,
         index=True,
     )
+    delivery_method_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("delivery_methods.id"),
+        nullable=True,
+        index=True,
+    )
 
     is_to_deliver: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", index=True)
     payment_method: Mapped[str] = mapped_column(String(60), nullable=False)
     total_price: Mapped[float] = mapped_column(Float, nullable=False, default=0)
 
@@ -38,6 +45,7 @@ class Order(Base):
     )
 
     customer = relationship("Customer", back_populates="orders")
+    delivery_method = relationship("DeliveryMethod", back_populates="orders")
     items = relationship(
         "OrderItem",
         back_populates="order",

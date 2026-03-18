@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, EmailStr, HttpUrl
+from pydantic import BaseModel, ConfigDict, EmailStr
 from uuid import UUID
 
 
@@ -17,11 +17,32 @@ class StoreCreate(BaseModel):
     instagram: str | None = None
     email: EmailStr | None = None
 
-    logo: HttpUrl | None = None
+    logo: str | None = None
 
     color: str | None = None
 
     has_catalog_active: bool = False
+
+
+class StoreUpdate(BaseModel):
+
+    name: str | None = None
+    description: str | None = None
+
+    does_delivery: bool | None = None
+    does_pick_up: bool | None = None
+
+    phone: str | None = None
+    whatsapp: str | None = None
+    address: str | None = None
+    instagram: str | None = None
+    email: EmailStr | None = None
+
+    logo: str | None = None
+
+    color: str | None = None
+
+    has_catalog_active: bool | None = None
 
 
 class StoreResponse(BaseModel):

@@ -23,7 +23,7 @@ if config.config_file_name is not None:
 
 # add your model's MetaData object here
 from app.core.database import Base
-from app.domain.models import user, product, store, category, product_category, customer, order, order_item, cart, cart_item, payment_method
+from app.domain.models import user, product, store, category, product_category, customer, order, order_item, cart, cart_item, payment_method, delivery_method
 
 target_metadata = Base.metadata
 

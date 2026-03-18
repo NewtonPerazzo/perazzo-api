@@ -26,7 +26,7 @@ class Store(Base):
     address: Mapped[str | None] = mapped_column(String(255), nullable=True)
     instagram: Mapped[str | None] = mapped_column(String(255), nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    logo: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    logo: Mapped[str | None] = mapped_column(Text, nullable=True)
     color: Mapped[str | None] = mapped_column(String(30), nullable=True)
 
     has_catalog_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

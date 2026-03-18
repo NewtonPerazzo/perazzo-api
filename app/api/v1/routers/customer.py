@@ -1,6 +1,7 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -26,11 +27,17 @@ def create_customer(
 
 @router.get("", response_model=list[CustomerResponse])
 def list_customers(
+    response: Response,
     skip: int = 0,
     limit: int = 20,
+    search: str | None = None,
     db: Session = Depends(get_db),
 ):
-    return CustomerService(db).list(skip=skip, limit=limit)
+    service = CustomerService(db)
+    items = service.list(skip=skip, limit=limit, search=search)
+    total = service.count(search=search)
+    response.headers["X-Total-Count"] = str(total)
+    return items
 
 
 @router.get("/{customer_id}", response_model=CustomerResponse)
@@ -66,5 +73,12 @@ def delete_customer(
     customer = service.get_by_id(customer_id)
     if not customer:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
-    service.delete(customer)
+    try:
+        service.delete(customer)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Customer cannot be deleted because it is linked to existing orders",
+        )
     return None

@@ -205,6 +205,7 @@ class CartService:
         stmt = (
             select(Product)
             .options(selectinload(Product.categories))
+            .where(Product.is_active.is_(True))
             .where(Product.id.in_(unique_ids))
         )
         products = self.db.execute(stmt).scalars().all()
