@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from app.schemas.customer import CustomerCreate, CustomerResponse
+from app.schemas.courier import CourierResponse
 from app.schemas.delivery_method import DeliveryMethodResponse
 from app.schemas.product import ProductResponse
 
@@ -28,6 +29,7 @@ class OrderCreate(BaseModel):
     customer: CustomerCreate
     is_to_deliver: bool = False
     delivery_method_id: UUID | None = None
+    courier_id: UUID | None = None
     payment_method: str = Field(..., min_length=1, max_length=60)
     observation: str | None = None
 
@@ -57,6 +59,7 @@ class OrderResponse(BaseModel):
     customer: CustomerResponse
     is_to_deliver: bool
     delivery_method: DeliveryMethodResponse | None
+    courier: CourierResponse | None = None
     status: OrderStatus
     payment_method: str
     observation: str | None

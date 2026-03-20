@@ -40,3 +40,4 @@ class Store(Base):
 
     user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     user = relationship("User", back_populates="store")
+    couriers = relationship("Courier", passive_deletes=True)

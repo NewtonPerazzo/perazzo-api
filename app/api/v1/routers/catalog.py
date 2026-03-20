@@ -404,7 +404,7 @@ def checkout_catalog_cart(
     )
 
     order_service = OrderService(db)
-    order = order_service.create(order_payload)
+    order = order_service.create(data=order_payload)
     response = order_service.serialize(order)
 
     cart_service.delete(cart)

@@ -28,8 +28,9 @@ router = APIRouter(
 def create_order(
     data: OrderCreate,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    order = OrderService(db).create(data)
+    order = OrderService(db).create(current_user=current_user, data=data)
     return OrderService(db).serialize(order)
 
 
@@ -96,12 +97,13 @@ def update_order(
     order_id: uuid.UUID,
     data: OrderUpdate,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     service = OrderService(db)
     order = service.get_by_id(order_id)
     if not order:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
-    updated = service.update(order, data)
+    updated = service.update(current_user=current_user, order=order, data=data)
     return service.serialize(updated)
 
 

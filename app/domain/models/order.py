@@ -26,6 +26,12 @@ class Order(Base):
         nullable=True,
         index=True,
     )
+    courier_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("couriers.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     is_to_deliver: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", index=True)
@@ -47,6 +53,7 @@ class Order(Base):
 
     customer = relationship("Customer", back_populates="orders")
     delivery_method = relationship("DeliveryMethod", back_populates="orders")
+    courier = relationship("Courier", back_populates="orders")
     items = relationship(
         "OrderItem",
         back_populates="order",

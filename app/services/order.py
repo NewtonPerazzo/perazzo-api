@@ -13,6 +13,7 @@ from app.domain.models.delivery_method import DeliveryMethod
 from app.domain.models.order import Order
 from app.domain.models.order_item import OrderItem
 from app.domain.models.product import Product
+from app.services.courier import CourierService
 from app.schemas.order import OrderCreate, OrderUpdate, ProductOrderCreate
 from app.util.calculations import calculate_order_item_total, calculate_order_total
 
@@ -21,7 +22,12 @@ class OrderService:
     def __init__(self, db: Session):
         self.db = db
 
-    def create(self, data: OrderCreate) -> Order:
+    def create(self, current_user=None, data: OrderCreate | None = None) -> Order:
+        if data is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Order payload is required",
+            )
         products_by_id = self._get_products_map([item.product_id for item in data.products])
         order_number = self._generate_order_number()
 
@@ -45,6 +51,11 @@ class OrderService:
             customer_id=customer.id,
             is_to_deliver=data.is_to_deliver,
             delivery_method_id=delivery_method.id if delivery_method else None,
+            courier_id=CourierService(self.db).resolve_courier_for_order(
+                current_user=current_user,
+                is_to_deliver=data.is_to_deliver,
+                courier_id=data.courier_id,
+            ),
             status="pending",
             payment_method=data.payment_method,
             observation=data.observation,
@@ -60,7 +71,12 @@ class OrderService:
         self.db.refresh(order)
         return self.get_by_id(order.id)
 
-    def update(self, order: Order, data: OrderUpdate) -> Order:
+    def update(self, current_user=None, order: Order | None = None, data: OrderUpdate | None = None) -> Order:
+        if not order or not data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Order and payload are required",
+            )
         products_by_id = self._get_products_map([item.product_id for item in data.products])
         delivery_method = self._resolve_delivery_method(
             is_to_deliver=data.is_to_deliver,
@@ -70,6 +86,11 @@ class OrderService:
 
         order.is_to_deliver = data.is_to_deliver
         order.delivery_method_id = delivery_method.id if delivery_method else None
+        order.courier_id = CourierService(self.db).resolve_courier_for_order(
+            current_user=current_user,
+            is_to_deliver=data.is_to_deliver,
+            courier_id=data.courier_id,
+        )
         order.payment_method = data.payment_method
         order.observation = data.observation
         order.total_price = self._calculate_total_price(items_total, delivery_method)
@@ -135,6 +156,7 @@ class OrderService:
             .options(
                 selectinload(Order.customer),
                 selectinload(Order.delivery_method),
+                selectinload(Order.courier),
                 selectinload(Order.items)
                 .joinedload(OrderItem.product)
                 .selectinload(Product.categories)
@@ -157,6 +179,7 @@ class OrderService:
             .options(
                 selectinload(Order.customer),
                 selectinload(Order.delivery_method),
+                selectinload(Order.courier),
                 selectinload(Order.items)
                 .joinedload(OrderItem.product)
                 .selectinload(Product.categories)
@@ -192,6 +215,7 @@ class OrderService:
             },
             "is_to_deliver": order.is_to_deliver,
             "delivery_method": order.delivery_method,
+            "courier": order.courier,
             "status": order.status,
             "payment_method": order.payment_method,
             "observation": order.observation,

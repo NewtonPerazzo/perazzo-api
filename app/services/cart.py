@@ -132,7 +132,7 @@ class CartService:
         )
 
         order_service = OrderService(self.db)
-        order = order_service.create(order_payload)
+        order = order_service.create(data=order_payload)
         order_data = order_service.serialize(order)
 
         self.db.delete(cart)
