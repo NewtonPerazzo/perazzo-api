@@ -28,6 +28,7 @@ from app.services.order import OrderService
 from app.services.payment_method import PaymentMethodService
 from app.services.product import ProductService
 from app.services.store import StoreService
+from app.util.store_hours import is_open_now, normalize_business_hours
 
 router = APIRouter(prefix="/catalog", tags=["Catalog"])
 
@@ -44,7 +45,28 @@ def _get_active_store_or_404(store_slug: str, db: Session):
 
 
 def _serialize_store(store) -> CatalogStoreResponse:
-    return CatalogStoreResponse.model_validate(store)
+    return CatalogStoreResponse(
+        id=store.id,
+        name=store.name,
+        slug=store.slug,
+        description=store.description,
+        phone=store.phone,
+        whatsapp=store.whatsapp,
+        address=store.address,
+        instagram=store.instagram,
+        email=store.email,
+        logo=store.logo,
+        color=store.color,
+        is_accepted_send_order_to_whatsapp=store.is_accepted_send_order_to_whatsapp,
+        business_hours=normalize_business_hours(store.business_hours),
+        is_open_now=is_open_now(store.business_hours),
+    )
+
+
+def _ensure_store_open_for_cart_actions(store, db: Session):
+    service = StoreService(db)
+    if not service.is_open_now(store):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Store is currently closed")
 
 
 def _serialize_product(product) -> CatalogProductResponse:
@@ -292,7 +314,8 @@ def create_catalog_cart(
     data: CartCreate,
     db: Session = Depends(get_db),
 ):
-    _get_active_store_or_404(store_slug, db)
+    store = _get_active_store_or_404(store_slug, db)
+    _ensure_store_open_for_cart_actions(store, db)
     cart = CartService(db).create(data)
     return _serialize_cart(CartService(db).serialize(cart))
 
@@ -320,7 +343,8 @@ def replace_catalog_cart_products(
     data: CartProductsReplace,
     db: Session = Depends(get_db),
 ):
-    _get_active_store_or_404(store_slug, db)
+    store = _get_active_store_or_404(store_slug, db)
+    _ensure_store_open_for_cart_actions(store, db)
 
     service = CartService(db)
     cart = service.get_by_id(cart_id)
@@ -341,7 +365,8 @@ def preview_catalog_cart_total(
     data: CatalogCartPreviewTotalRequest,
     db: Session = Depends(get_db),
 ):
-    _get_active_store_or_404(store_slug, db)
+    store = _get_active_store_or_404(store_slug, db)
+    _ensure_store_open_for_cart_actions(store, db)
 
     cart_service = CartService(db)
     cart = cart_service.get_by_id(cart_id)
@@ -364,7 +389,8 @@ def checkout_catalog_cart(
     data: CatalogCartCheckoutRequest,
     db: Session = Depends(get_db),
 ):
-    _get_active_store_or_404(store_slug, db)
+    store = _get_active_store_or_404(store_slug, db)
+    _ensure_store_open_for_cart_actions(store, db)
 
     cart_service = CartService(db)
     cart = cart_service.get_by_id(cart_id)

@@ -17,6 +17,8 @@ class CatalogStoreResponse(BaseModel):
     logo: str | None
     color: str | None
     is_accepted_send_order_to_whatsapp: bool
+    business_hours: dict
+    is_open_now: bool
 
     model_config = ConfigDict(from_attributes=True)
 

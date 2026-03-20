@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -31,6 +31,7 @@ class Store(Base):
 
     has_catalog_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_accepted_send_order_to_whatsapp: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    business_hours: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

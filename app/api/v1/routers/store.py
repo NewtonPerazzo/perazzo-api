@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
-from app.schemas.store import StoreCreate, StoreResponse, StoreUpdate
+from app.schemas.store import StoreCreate, StoreResponse, StoreTodayOpenToggle, StoreUpdate
 from app.services.store import StoreService
 
 router = APIRouter(
@@ -25,8 +25,7 @@ def create_store(
 ):
   service = StoreService(db)
   store = service.create(data, current_user)
-
-  return store
+  return service.serialize(store)
 
 
 @router.patch(
@@ -47,7 +46,8 @@ def update_my_store(
       detail="Store not found"
     )
 
-  return service.update(store, data)
+  updated = service.update(store, data)
+  return service.serialize(updated)
 
 
 @router.get(
@@ -67,7 +67,29 @@ def get_my_store(
       detail="Store not found"
     )
 
-  return store
+  return service.serialize(store)
+
+
+@router.patch(
+  "/me/today-open",
+  response_model=StoreResponse
+)
+def toggle_today_open(
+  data: StoreTodayOpenToggle,
+  db: Session = Depends(get_db),
+  current_user = Depends(get_current_user)
+):
+  service = StoreService(db)
+  store = service.get_by_user_id(current_user.id)
+
+  if not store:
+    raise HTTPException(
+      status_code=status.HTTP_404_NOT_FOUND,
+      detail="Store not found"
+    )
+
+  updated = service.toggle_today_open(store=store, should_open=data.should_open)
+  return service.serialize(updated)
 
 
 @router.get(
@@ -87,4 +109,4 @@ def get_store_by_slug(
       detail="Store not found"
     )
 
-  return store
+  return service.serialize(store)

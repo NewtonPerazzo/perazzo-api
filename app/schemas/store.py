@@ -23,6 +23,7 @@ class StoreCreate(BaseModel):
 
     has_catalog_active: bool = False
     is_accepted_send_order_to_whatsapp: bool = False
+    business_hours: dict | None = None
 
 
 class StoreUpdate(BaseModel):
@@ -45,6 +46,11 @@ class StoreUpdate(BaseModel):
 
     has_catalog_active: bool | None = None
     is_accepted_send_order_to_whatsapp: bool | None = None
+    business_hours: dict | None = None
+
+
+class StoreTodayOpenToggle(BaseModel):
+    should_open: bool
 
 
 class StoreResponse(BaseModel):
@@ -68,6 +74,8 @@ class StoreResponse(BaseModel):
 
     has_catalog_active: bool
     is_accepted_send_order_to_whatsapp: bool
+    business_hours: dict
+    is_open_now: bool
 
     user_id: UUID
     created_at: datetime
