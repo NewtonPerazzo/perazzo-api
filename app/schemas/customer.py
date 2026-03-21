@@ -27,6 +27,9 @@ class CustomerResponse(BaseModel):
     address: str | None
     neighborhood: str | None
     email: EmailStr | None
+    delivered_orders_count: int
+    delivered_total_spent: float
+    orders_count: int = 0
     created_at: datetime
 
     class Config:

@@ -141,13 +141,16 @@ def _serialize_cart(cart: dict) -> CatalogCartResponse:
 
 
 def _build_categories_payload(product_service: ProductService, categories: list, search: str | None):
-    payload: list[CatalogCategoryResponse] = []
+    payload: list[tuple[object, CatalogCategoryResponse]] = []
     for category in categories:
-        count = product_service.count(search=search, category_id=category.id)
-        payload.append(_serialize_category(category, products_count=count))
+        count = product_service.count(search=search, category_id=category.id, catalog_mode=True)
+        if count <= 0:
+            continue
+        payload.append((category, _serialize_category(category, products_count=count)))
 
-    uncategorized_count = product_service.count(search=search, uncategorized=True)
-    payload.append(_others_category(products_count=uncategorized_count))
+    uncategorized_count = product_service.count(search=search, uncategorized=True, catalog_mode=True)
+    if uncategorized_count > 0:
+        payload.append((None, _others_category(products_count=uncategorized_count)))
 
     return payload
 
@@ -164,15 +167,19 @@ def get_catalog_home(
     product_service = ProductService(db)
 
     categories = category_service.list(skip=0, limit=200)
-    categories_payload = _build_categories_payload(product_service, categories, search)
+    categories_with_payload = _build_categories_payload(product_service, categories, search)
+    categories_payload = [item[1] for item in categories_with_payload]
 
     sections: list[CatalogHomeSectionResponse] = []
-    for category, category_payload in zip(categories, categories_payload):
+    for category, category_payload in categories_with_payload:
+        if category is None:
+            continue
         products = product_service.list(
             skip=0,
             limit=20,
             search=search,
             category_id=category.id,
+            catalog_mode=True,
         )
 
         if len(products) == 0:
@@ -185,7 +192,7 @@ def get_catalog_home(
             )
         )
 
-    uncategorized_products = product_service.list(skip=0, limit=20, search=search, uncategorized=True)
+    uncategorized_products = product_service.list(skip=0, limit=20, search=search, uncategorized=True, catalog_mode=True)
     if len(uncategorized_products) > 0:
         sections.append(
             CatalogHomeSectionResponse(
@@ -214,7 +221,8 @@ def list_catalog_products(
     product_service = ProductService(db)
 
     categories = category_service.list(skip=0, limit=200)
-    categories_payload = _build_categories_payload(product_service, categories, search)
+    categories_with_payload = _build_categories_payload(product_service, categories, search)
+    categories_payload = [item[1] for item in categories_with_payload]
 
     selected_category = None
     category_id: uuid.UUID | None = None
@@ -231,9 +239,10 @@ def list_catalog_products(
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
 
             category_id = category.id
+            count = product_service.count(search=search, category_id=category.id, catalog_mode=True)
             selected_category = _serialize_category(
                 category,
-                products_count=product_service.count(search=search, category_id=category.id),
+                products_count=count,
             )
 
     products = product_service.list(
@@ -242,6 +251,7 @@ def list_catalog_products(
         search=search,
         category_id=category_id,
         uncategorized=uncategorized,
+        catalog_mode=True,
     )
 
     return CatalogProductsPageResponse(

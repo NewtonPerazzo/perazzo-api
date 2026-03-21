@@ -48,9 +48,18 @@ class ProductService:
     uncategorized: bool = False,
     sort_by: str | None = "created_at",
     sort_order: str | None = "desc",
+    catalog_mode: bool = False,
+    only_active: bool = True,
   ) -> List[Product]:
     stmt = select(Product).options(selectinload(Product.categories))
-    stmt = self._apply_filters(stmt, search=search, category_id=category_id, uncategorized=uncategorized)
+    stmt = self._apply_filters(
+      stmt,
+      search=search,
+      category_id=category_id,
+      uncategorized=uncategorized,
+      catalog_mode=catalog_mode,
+      only_active=only_active
+    )
     stmt = self._apply_sorting(stmt, sort_by=sort_by, sort_order=sort_order)
     stmt = stmt.offset(skip).limit(limit)
 
@@ -63,9 +72,18 @@ class ProductService:
     search: str | None = None,
     category_id: uuid.UUID | None = None,
     uncategorized: bool = False,
+    catalog_mode: bool = False,
+    only_active: bool = True,
   ) -> int:
     stmt = select(func.count(Product.id))
-    stmt = self._apply_filters(stmt, search=search, category_id=category_id, uncategorized=uncategorized)
+    stmt = self._apply_filters(
+      stmt,
+      search=search,
+      category_id=category_id,
+      uncategorized=uncategorized,
+      catalog_mode=catalog_mode,
+      only_active=only_active
+    )
 
     result = self.db.execute(stmt).scalar_one()
     return int(result)
@@ -82,8 +100,12 @@ class ProductService:
       description=data.description,
       stock=data.stock,
       image_url=data.image_url,
+      is_active=data.is_active,
       categories=categories,
     )
+
+    if product.stock == 0:
+      product.is_active = False
 
     self.db.add(product)
     self.db.commit()
@@ -105,6 +127,9 @@ class ProductService:
     for field, value in update_data.items():
         setattr(product, field, value)
 
+    if product.stock == 0:
+      product.is_active = False
+
     self.db.commit()
     self.db.refresh(product)
 
@@ -117,8 +142,25 @@ class ProductService:
     self.db.commit()
 
 
-  def _apply_filters(self, stmt, search: str | None, category_id: uuid.UUID | None, uncategorized: bool = False):
-    stmt = stmt.where(Product.is_active.is_(True))
+  def _apply_filters(
+    self,
+    stmt,
+    search: str | None,
+    category_id: uuid.UUID | None,
+    uncategorized: bool = False,
+    catalog_mode: bool = False,
+    only_active: bool = True
+  ):
+    if only_active:
+      stmt = stmt.where(Product.is_active.is_(True))
+
+    if catalog_mode:
+      stmt = stmt.where(
+        or_(
+          Product.stock.is_(None),
+          Product.stock > 0
+        )
+      )
 
     if search:
       search_term = f"%{search}%"

@@ -3,6 +3,7 @@ import string
 import uuid
 from datetime import date, datetime
 from typing import Dict, List
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
@@ -16,6 +17,8 @@ from app.domain.models.product import Product
 from app.services.courier import CourierService
 from app.schemas.order import OrderCreate, OrderUpdate, ProductOrderCreate
 from app.util.calculations import calculate_order_item_total, calculate_order_total
+
+LOCAL_TIMEZONE = "America/Sao_Paulo"
 
 
 class OrderService:
@@ -31,15 +34,7 @@ class OrderService:
         products_by_id = self._get_products_map([item.product_id for item in data.products])
         order_number = self._generate_order_number()
 
-        customer = Customer(
-            name=data.customer.name,
-            phone=data.customer.phone,
-            address=data.customer.address,
-            neighborhood=data.customer.neighborhood,
-            email=data.customer.email,
-        )
-        self.db.add(customer)
-        self.db.flush()
+        customer = self._get_or_create_customer_by_phone(data.customer)
 
         delivery_method = self._resolve_delivery_method(
             is_to_deliver=data.is_to_deliver,
@@ -57,6 +52,7 @@ class OrderService:
                 courier_id=data.courier_id,
             ),
             status="pending",
+            is_stock_reduced=False,
             payment_method=data.payment_method,
             observation=data.observation,
             total_price=0,
@@ -82,6 +78,7 @@ class OrderService:
             is_to_deliver=data.is_to_deliver,
             delivery_method_id=data.delivery_method_id,
         )
+
         order_items, items_total = self._build_order_items(data.products, products_by_id)
 
         order.is_to_deliver = data.is_to_deliver
@@ -107,10 +104,31 @@ class OrderService:
         return self.get_by_id(order.id)
 
     def delete(self, order: Order) -> None:
+        if order.status == "deliveried":
+            self._decrement_customer_sales(order.customer, order.total_price)
+
+        if order.is_stock_reduced:
+            self._restore_product_stock(order)
+
         self.db.delete(order)
         self.db.commit()
 
     def update_status(self, order: Order, status_value: str) -> Order:
+        previous_status = order.status
+
+        if previous_status != status_value and status_value in {"confirmed", "deliveried"} and not order.is_stock_reduced:
+            self._reduce_product_stock(order)
+            order.is_stock_reduced = True
+
+        if previous_status != status_value and status_value == "canceled" and order.is_stock_reduced:
+            self._restore_product_stock(order)
+            order.is_stock_reduced = False
+
+        if previous_status != "deliveried" and status_value == "deliveried":
+            self._increment_customer_sales(order.customer, order.total_price)
+        elif previous_status == "deliveried" and status_value != "deliveried":
+            self._decrement_customer_sales(order.customer, order.total_price)
+
         order.status = status_value
         self.db.commit()
         self.db.refresh(order)
@@ -192,6 +210,9 @@ class OrderService:
         customer_email = order.customer.email
         if customer_email and str(customer_email).endswith(".local"):
             customer_email = None
+        customer_orders_count = self.db.execute(
+            select(func.count(Order.id)).where(Order.customer_id == order.customer.id)
+        ).scalar_one()
 
         return {
             "id": order.id,
@@ -211,6 +232,9 @@ class OrderService:
                 "address": order.customer.address,
                 "neighborhood": order.customer.neighborhood,
                 "email": customer_email,
+                "delivered_orders_count": order.customer.delivered_orders_count,
+                "delivered_total_spent": order.customer.delivered_total_spent,
+                "orders_count": int(customer_orders_count or 0),
                 "created_at": order.customer.created_at,
             },
             "is_to_deliver": order.is_to_deliver,
@@ -251,8 +275,8 @@ class OrderService:
         )
 
     def _apply_filters(self, stmt, search: str | None, order_date: date | None):
-        target_date = order_date or datetime.now().date()
-        stmt = stmt.where(func.date(Order.created_at) == target_date)
+        target_date = order_date or datetime.now(ZoneInfo(LOCAL_TIMEZONE)).date()
+        stmt = stmt.where(func.date(func.timezone(LOCAL_TIMEZONE, Order.created_at)) == target_date)
 
         if not search:
             return stmt
@@ -332,3 +356,61 @@ class OrderService:
             )
 
         return order_items, calculate_order_total(item_totals)
+
+    def _get_or_create_customer_by_phone(self, customer_data) -> Customer:
+        phone = (customer_data.phone or "").strip()
+        if phone and phone != "-":
+            # Phone is not unique in legacy data, so use the newest record if duplicated.
+            existing = self.db.execute(
+                select(Customer)
+                .where(Customer.phone == phone)
+                .order_by(Customer.created_at.desc())
+                .limit(1)
+            ).scalars().first()
+            if existing:
+                existing.name = customer_data.name
+                existing.address = customer_data.address
+                existing.neighborhood = customer_data.neighborhood
+                existing.email = customer_data.email
+                self.db.flush()
+                return existing
+
+        customer = Customer(
+            name=customer_data.name,
+            phone=customer_data.phone,
+            address=customer_data.address,
+            neighborhood=customer_data.neighborhood,
+            email=customer_data.email,
+        )
+        self.db.add(customer)
+        self.db.flush()
+        return customer
+
+    def _increment_customer_sales(self, customer: Customer, amount: float) -> None:
+        customer.delivered_orders_count = int(customer.delivered_orders_count or 0) + 1
+        customer.delivered_total_spent = float(customer.delivered_total_spent or 0) + float(amount)
+
+    def _decrement_customer_sales(self, customer: Customer, amount: float) -> None:
+        customer.delivered_orders_count = max(0, int(customer.delivered_orders_count or 0) - 1)
+        customer.delivered_total_spent = max(0.0, float(customer.delivered_total_spent or 0) - float(amount))
+
+    def _reduce_product_stock(self, order: Order) -> None:
+        for item in order.items:
+            product = item.product
+            if product.stock is None:
+                continue
+            if product.stock < item.amount:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Insufficient stock for product: {product.name}",
+                )
+            product.stock = int(product.stock - item.amount)
+            if product.stock == 0:
+                product.is_active = False
+
+    def _restore_product_stock(self, order: Order) -> None:
+        for item in order.items:
+            product = item.product
+            if product.stock is None:
+                continue
+            product.stock = int(product.stock + item.amount)

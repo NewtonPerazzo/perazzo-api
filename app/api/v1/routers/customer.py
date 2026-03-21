@@ -58,10 +58,10 @@ def update_customer(
     db: Session = Depends(get_db),
 ):
     service = CustomerService(db)
-    customer = service.get_by_id(customer_id)
-    if not customer:
+    updated = service.update(customer_id=customer_id, data=data)
+    if not updated:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
-    return service.update(customer, data)
+    return updated
 
 
 @router.delete("/{customer_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -70,11 +70,11 @@ def delete_customer(
     db: Session = Depends(get_db),
 ):
     service = CustomerService(db)
-    customer = service.get_by_id(customer_id)
-    if not customer:
+    exists = service.get_by_id(customer_id)
+    if not exists:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
     try:
-        service.delete(customer)
+        service.delete(customer_id)
     except IntegrityError:
         db.rollback()
         raise HTTPException(

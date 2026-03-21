@@ -58,6 +58,8 @@ class CashRegisterByPaymentResponse(BaseModel):
 
 class CashRegisterTotalsResponse(BaseModel):
     auto_entries: float
+    auto_entries_with_delivery: float
+    delivery_total: float
     manual_entries: float
     entries_total: float
     expenses_total: float

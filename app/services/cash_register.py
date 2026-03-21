@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.domain.models.cash_register_entry import CashRegisterEntry
 from app.domain.models.order import Order
+from app.domain.models.order_item import OrderItem
 from app.services.store import StoreService
 from app.schemas.cash_register import CashPeriodView, CashRegisterEntryCreate, CashRegisterEntryUpdate
 
@@ -118,6 +119,8 @@ class CashRegisterService:
         )
 
         auto_total = sum(float(item["amount"]) for item in auto_entries)
+        auto_total_with_delivery = sum(float(item["amount_with_delivery"]) for item in auto_entries)
+        delivery_total = max(0.0, auto_total_with_delivery - auto_total)
         manual_entries_total = sum(float(item.amount) for item in manual_entries)
         manual_expenses_total = sum(float(item.amount) for item in manual_expenses)
         profits_total = sum(float(item.amount) for item in profit_entries)
@@ -166,6 +169,8 @@ class CashRegisterService:
             "by_payment_method": by_payment_method,
             "totals": {
                 "auto_entries": round(auto_total, 2),
+                "auto_entries_with_delivery": round(auto_total_with_delivery, 2),
+                "delivery_total": round(delivery_total, 2),
                 "manual_entries": round(manual_entries_total, 2),
                 "entries_total": round(entries_total, 2),
                 "expenses_total": round(manual_expenses_total, 2),
@@ -199,8 +204,10 @@ class CashRegisterService:
         stmt = (
             select(
                 func.coalesce(func.nullif(Order.payment_method, ""), "Sem forma").label("payment_method"),
-                func.coalesce(func.sum(Order.total_price), 0).label("amount"),
+                func.coalesce(func.sum(OrderItem.price), 0).label("amount"),
+                func.coalesce(func.sum(Order.total_price), 0).label("amount_with_delivery"),
             )
+            .join(OrderItem, OrderItem.order_id == Order.id)
             .where(
                 func.date(Order.created_at) >= period_start,
                 func.date(Order.created_at) <= period_end,
@@ -222,9 +229,10 @@ class CashRegisterService:
                 "name": f"Pedidos do {period_label} - {str(row.payment_method).upper()}",
                 "payment_method": str(row.payment_method),
                 "amount": round(float(row.amount or 0), 2),
+                "amount_with_delivery": round(float(row.amount_with_delivery or 0), 2),
             }
             for row in rows
-            if float(row.amount or 0) > 0
+            if float(row.amount or 0) > 0 or float(row.amount_with_delivery or 0) > 0
         ]
 
     def _resolve_period_range(self, target_date: date, period_view: CashPeriodView) -> tuple[date, date]:

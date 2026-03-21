@@ -26,6 +26,7 @@ class CartService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Product not found: {data.product.product_id}",
             )
+        self._ensure_stock_available(product, data.product.amount)
 
         unit_price = float(product.price)
         item_total = calculate_order_item_total(data.product.amount, unit_price)
@@ -183,18 +184,21 @@ class CartService:
             unit_price = float(product.price)
             if product_item.product_id in existing_by_product:
                 existing_item = existing_by_product[product_item.product_id]
-                existing_item.amount += product_item.amount
+                next_amount = existing_item.amount + product_item.amount
+                self._ensure_stock_available(product, next_amount)
+                existing_item.amount = next_amount
                 existing_item.unit_price = unit_price
                 existing_item.price = calculate_order_item_total(existing_item.amount, unit_price)
             else:
-                cart.items.append(
-                    CartItem(
-                        product_id=product.id,
-                        amount=product_item.amount,
-                        unit_price=unit_price,
-                        price=calculate_order_item_total(product_item.amount, unit_price),
-                    )
+                self._ensure_stock_available(product, product_item.amount)
+                new_item = CartItem(
+                    product_id=product.id,
+                    amount=product_item.amount,
+                    unit_price=unit_price,
+                    price=calculate_order_item_total(product_item.amount, unit_price),
                 )
+                cart.items.append(new_item)
+                existing_by_product[product_item.product_id] = new_item
 
     def _recalculate_total(self, cart: Cart) -> None:
         item_totals = [item.price for item in cart.items]
@@ -210,3 +214,14 @@ class CartService:
         )
         products = self.db.execute(stmt).scalars().all()
         return {product.id: product for product in products}
+
+    def _ensure_stock_available(self, product: Product, requested_amount: int) -> None:
+        if requested_amount <= 0:
+            return
+        if product.stock is None:
+            return
+        if int(requested_amount) > int(product.stock):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Insufficient stock: only {int(product.stock)} units",
+            )

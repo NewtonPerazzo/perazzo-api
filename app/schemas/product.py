@@ -19,6 +19,7 @@ class ProductCreate(BaseModel):
   image_url: Optional[str] = None
 
   category_ids: list[UUID] = Field(default_factory=list)
+  is_active: bool = True
 
 
 class ProductUpdate(BaseModel):
@@ -34,6 +35,7 @@ class ProductUpdate(BaseModel):
   image_url: Optional[str] = None
 
   category_ids: Optional[list[UUID]] = None
+  is_active: Optional[bool] = None
 
 class ProductResponse(BaseModel):
 

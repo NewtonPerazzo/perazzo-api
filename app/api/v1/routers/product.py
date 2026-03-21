@@ -45,10 +45,11 @@ def list_products(
   category_id: uuid.UUID | None = None,
   sort_by: str | None = "created_at",
   sort_order: str | None = "desc",
+  include_inactive: bool = True,
   db: Session = Depends(get_db)
 ):
     service = ProductService(db)
-    total = service.count(search=search, category_id=category_id)
+    total = service.count(search=search, category_id=category_id, only_active=not include_inactive)
     products = service.list(
       skip=skip,
       limit=limit,
@@ -56,6 +57,7 @@ def list_products(
       category_id=category_id,
       sort_by=sort_by,
       sort_order=sort_order,
+      only_active=not include_inactive
     )
 
     response.headers["X-Total-Count"] = str(total)
