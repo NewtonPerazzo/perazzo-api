@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Float, String
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -12,6 +12,12 @@ class Cart(Base):
     __tablename__ = "carts"
 
     id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    store_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("stores.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
 
     customer_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     customer_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)

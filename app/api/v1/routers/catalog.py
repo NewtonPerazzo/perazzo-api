@@ -140,15 +140,15 @@ def _serialize_cart(cart: dict) -> CatalogCartResponse:
     )
 
 
-def _build_categories_payload(product_service: ProductService, categories: list, search: str | None):
+def _build_categories_payload(product_service: ProductService, categories: list, search: str | None, *, store_id: uuid.UUID):
     payload: list[tuple[object, CatalogCategoryResponse]] = []
     for category in categories:
-        count = product_service.count(search=search, category_id=category.id, catalog_mode=True)
+        count = product_service.count(search=search, category_id=category.id, catalog_mode=True, store_id=store_id)
         if count <= 0:
             continue
         payload.append((category, _serialize_category(category, products_count=count)))
 
-    uncategorized_count = product_service.count(search=search, uncategorized=True, catalog_mode=True)
+    uncategorized_count = product_service.count(search=search, uncategorized=True, catalog_mode=True, store_id=store_id)
     if uncategorized_count > 0:
         payload.append((None, _others_category(products_count=uncategorized_count)))
 
@@ -166,8 +166,8 @@ def get_catalog_home(
     category_service = CategoryService(db)
     product_service = ProductService(db)
 
-    categories = category_service.list(skip=0, limit=200)
-    categories_with_payload = _build_categories_payload(product_service, categories, search)
+    categories = category_service.list(skip=0, limit=200, store_id=store.id)
+    categories_with_payload = _build_categories_payload(product_service, categories, search, store_id=store.id)
     categories_payload = [item[1] for item in categories_with_payload]
 
     sections: list[CatalogHomeSectionResponse] = []
@@ -180,6 +180,7 @@ def get_catalog_home(
             search=search,
             category_id=category.id,
             catalog_mode=True,
+            store_id=store.id,
         )
 
         if len(products) == 0:
@@ -192,7 +193,9 @@ def get_catalog_home(
             )
         )
 
-    uncategorized_products = product_service.list(skip=0, limit=20, search=search, uncategorized=True, catalog_mode=True)
+    uncategorized_products = product_service.list(
+        skip=0, limit=20, search=search, uncategorized=True, catalog_mode=True, store_id=store.id
+    )
     if len(uncategorized_products) > 0:
         sections.append(
             CatalogHomeSectionResponse(
@@ -220,8 +223,8 @@ def list_catalog_products(
     category_service = CategoryService(db)
     product_service = ProductService(db)
 
-    categories = category_service.list(skip=0, limit=200)
-    categories_with_payload = _build_categories_payload(product_service, categories, search)
+    categories = category_service.list(skip=0, limit=200, store_id=store.id)
+    categories_with_payload = _build_categories_payload(product_service, categories, search, store_id=store.id)
     categories_payload = [item[1] for item in categories_with_payload]
 
     selected_category = None
@@ -231,15 +234,15 @@ def list_catalog_products(
     if category_slug:
         if category_slug == OTHERS_CATEGORY_SLUG:
             uncategorized = True
-            uncategorized_count = product_service.count(search=search, uncategorized=True)
+            uncategorized_count = product_service.count(search=search, uncategorized=True, store_id=store.id)
             selected_category = _others_category(products_count=uncategorized_count)
         else:
-            category = category_service.get_by_slug(category_slug)
+            category = category_service.get_by_slug(category_slug, store_id=store.id)
             if not category:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
 
             category_id = category.id
-            count = product_service.count(search=search, category_id=category.id, catalog_mode=True)
+            count = product_service.count(search=search, category_id=category.id, catalog_mode=True, store_id=store.id)
             selected_category = _serialize_category(
                 category,
                 products_count=count,
@@ -252,6 +255,7 @@ def list_catalog_products(
         category_id=category_id,
         uncategorized=uncategorized,
         catalog_mode=True,
+        store_id=store.id,
     )
 
     return CatalogProductsPageResponse(
@@ -271,7 +275,7 @@ def get_catalog_product(
     store = _get_active_store_or_404(store_slug, db)
 
     product_service = ProductService(db)
-    product = product_service.get_by_slug(product_slug)
+    product = product_service.get_by_slug(product_slug, store_id=store.id)
     if not product or not product.is_active:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 
@@ -303,8 +307,8 @@ def list_catalog_payment_methods(
     limit: int = 50,
     db: Session = Depends(get_db),
 ):
-    _get_active_store_or_404(store_slug, db)
-    return PaymentMethodService(db).list(skip=skip, limit=limit)
+    store = _get_active_store_or_404(store_slug, db)
+    return PaymentMethodService(db).list(skip=skip, limit=limit, store_id=store.id)
 
 
 @router.get("/{store_slug}/delivery-methods", response_model=list[DeliveryMethodResponse])
@@ -314,8 +318,8 @@ def list_catalog_delivery_methods(
     limit: int = 200,
     db: Session = Depends(get_db),
 ):
-    _get_active_store_or_404(store_slug, db)
-    return DeliveryMethodService(db).list(skip=skip, limit=limit)
+    store = _get_active_store_or_404(store_slug, db)
+    return DeliveryMethodService(db).list(skip=skip, limit=limit, store_id=store.id)
 
 
 @router.post("/{store_slug}/carts", response_model=CatalogCartResponse, status_code=status.HTTP_201_CREATED)
@@ -326,7 +330,7 @@ def create_catalog_cart(
 ):
     store = _get_active_store_or_404(store_slug, db)
     _ensure_store_open_for_cart_actions(store, db)
-    cart = CartService(db).create(data)
+    cart = CartService(db).create(data, store_id=store.id)
     return _serialize_cart(CartService(db).serialize(cart))
 
 
@@ -336,10 +340,10 @@ def get_catalog_cart(
     cart_id: uuid.UUID,
     db: Session = Depends(get_db),
 ):
-    _get_active_store_or_404(store_slug, db)
+    store = _get_active_store_or_404(store_slug, db)
 
     service = CartService(db)
-    cart = service.get_by_id(cart_id)
+    cart = service.get_by_id(cart_id, store_id=store.id)
     if not cart:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cart not found")
 
@@ -357,11 +361,11 @@ def replace_catalog_cart_products(
     _ensure_store_open_for_cart_actions(store, db)
 
     service = CartService(db)
-    cart = service.get_by_id(cart_id)
+    cart = service.get_by_id(cart_id, store_id=store.id)
     if not cart:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cart not found")
 
-    updated = service.replace_products(cart, data.products)
+    updated = service.replace_products(cart, data.products, store_id=store.id)
     if updated is None:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -379,7 +383,7 @@ def preview_catalog_cart_total(
     _ensure_store_open_for_cart_actions(store, db)
 
     cart_service = CartService(db)
-    cart = cart_service.get_by_id(cart_id)
+    cart = cart_service.get_by_id(cart_id, store_id=store.id)
     if not cart:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cart not found")
 
@@ -388,6 +392,7 @@ def preview_catalog_cart_total(
         products=products,
         is_to_deliver=data.is_to_deliver,
         delivery_method_id=data.delivery_method_id,
+        store_id=store.id,
     )
     return {"total_price": total}
 
@@ -403,7 +408,7 @@ def checkout_catalog_cart(
     _ensure_store_open_for_cart_actions(store, db)
 
     cart_service = CartService(db)
-    cart = cart_service.get_by_id(cart_id)
+    cart = cart_service.get_by_id(cart_id, store_id=store.id)
     if not cart:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cart not found")
 
@@ -416,7 +421,7 @@ def checkout_catalog_cart(
     if data.is_to_deliver and not data.customer.address:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Address is required for delivery")
 
-    payment_method = PaymentMethodService(db).get_by_id(data.payment_method_id)
+    payment_method = PaymentMethodService(db).get_by_id(data.payment_method_id, store_id=store.id)
     if not payment_method:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Payment method not found")
 
@@ -440,7 +445,7 @@ def checkout_catalog_cart(
     )
 
     order_service = OrderService(db)
-    order = order_service.create(data=order_payload)
+    order = order_service.create(data=order_payload, store_id=store.id)
     response = order_service.serialize(order)
 
     cart_service.delete(cart)
@@ -454,12 +459,12 @@ def delete_catalog_cart(
     cart_id: uuid.UUID,
     db: Session = Depends(get_db),
 ):
-    _get_active_store_or_404(store_slug, db)
+    store = _get_active_store_or_404(store_slug, db)
 
     service = CartService(db)
-    cart = service.get_by_id(cart_id)
+    cart = service.get_by_id(cart_id, store_id=store.id)
     if not cart:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cart not found")
 
-    service.delete(cart)
+    service.delete(cart, store_id=store.id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

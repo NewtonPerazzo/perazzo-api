@@ -21,8 +21,9 @@ router = APIRouter(
 def create_customer(
     data: CustomerCreate,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    return CustomerService(db).create(data)
+    return CustomerService(db).create(data, current_user=current_user)
 
 
 @router.get("", response_model=list[CustomerResponse])
@@ -32,10 +33,11 @@ def list_customers(
     limit: int = 20,
     search: str | None = None,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     service = CustomerService(db)
-    items = service.list(skip=skip, limit=limit, search=search)
-    total = service.count(search=search)
+    items = service.list(skip=skip, limit=limit, search=search, current_user=current_user)
+    total = service.count(search=search, current_user=current_user)
     response.headers["X-Total-Count"] = str(total)
     return items
 
@@ -44,8 +46,9 @@ def list_customers(
 def get_customer(
     customer_id: uuid.UUID,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    customer = CustomerService(db).get_by_id(customer_id)
+    customer = CustomerService(db).get_by_id(customer_id, current_user=current_user)
     if not customer:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
     return customer
@@ -56,9 +59,10 @@ def update_customer(
     customer_id: uuid.UUID,
     data: CustomerUpdate,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     service = CustomerService(db)
-    updated = service.update(customer_id=customer_id, data=data)
+    updated = service.update(customer_id=customer_id, data=data, current_user=current_user)
     if not updated:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
     return updated
@@ -68,13 +72,14 @@ def update_customer(
 def delete_customer(
     customer_id: uuid.UUID,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     service = CustomerService(db)
-    exists = service.get_by_id(customer_id)
+    exists = service.get_by_id(customer_id, current_user=current_user)
     if not exists:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
     try:
-        service.delete(customer_id)
+        service.delete(customer_id, current_user=current_user)
     except IntegrityError:
         db.rollback()
         raise HTTPException(

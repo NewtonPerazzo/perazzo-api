@@ -42,10 +42,11 @@ def list_orders(
     search: str | None = None,
     order_date: date | None = None,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     service = OrderService(db)
-    orders = service.list(skip=skip, limit=limit, search=search, order_date=order_date)
-    total = service.count(search=search, order_date=order_date)
+    orders = service.list(skip=skip, limit=limit, search=search, order_date=order_date, current_user=current_user)
+    total = service.count(search=search, order_date=order_date, current_user=current_user)
     response.headers["X-Total-Count"] = str(total)
     return [service.serialize(order) for order in orders]
 
@@ -54,12 +55,14 @@ def list_orders(
 def preview_order_total(
     data: OrderTotalPreviewRequest,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     service = OrderService(db)
     total = service.preview_total_with_delivery(
         products=data.products,
         is_to_deliver=data.is_to_deliver,
         delivery_method_id=data.delivery_method_id,
+        current_user=current_user,
     )
     return {"total_price": total}
 
@@ -72,10 +75,11 @@ def search_orders(
     limit: int = 20,
     order_date: date | None = None,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     service = OrderService(db)
-    orders = service.list(skip=skip, limit=limit, search=q, order_date=order_date)
-    total = service.count(search=q, order_date=order_date)
+    orders = service.list(skip=skip, limit=limit, search=q, order_date=order_date, current_user=current_user)
+    total = service.count(search=q, order_date=order_date, current_user=current_user)
     response.headers["X-Total-Count"] = str(total)
     return [service.serialize(order) for order in orders]
 
@@ -84,9 +88,10 @@ def search_orders(
 def get_order(
     order_id: uuid.UUID,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     service = OrderService(db)
-    order = service.get_by_id(order_id)
+    order = service.get_by_id(order_id, current_user=current_user)
     if not order:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
     return service.serialize(order)
@@ -100,7 +105,7 @@ def update_order(
     current_user=Depends(get_current_user),
 ):
     service = OrderService(db)
-    order = service.get_by_id(order_id)
+    order = service.get_by_id(order_id, current_user=current_user)
     if not order:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
     updated = service.update(current_user=current_user, order=order, data=data)
@@ -111,12 +116,13 @@ def update_order(
 def delete_order(
     order_id: uuid.UUID,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     service = OrderService(db)
-    order = service.get_by_id(order_id)
+    order = service.get_by_id(order_id, current_user=current_user)
     if not order:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
-    service.delete(order)
+    service.delete(order, current_user=current_user)
     return None
 
 
@@ -125,10 +131,11 @@ def update_order_status(
     order_id: uuid.UUID,
     data: OrderStatusUpdate,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     service = OrderService(db)
-    order = service.get_by_id(order_id)
+    order = service.get_by_id(order_id, current_user=current_user)
     if not order:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
-    updated = service.update_status(order, data.status)
+    updated = service.update_status(order, data.status, current_user=current_user)
     return service.serialize(updated)

@@ -21,8 +21,9 @@ router = APIRouter(
 def create_cart(
     data: CartCreate,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    cart = CartService(db).create(data)
+    cart = CartService(db).create(data, current_user=current_user)
     return CartService(db).serialize(cart)
 
 
@@ -31,9 +32,10 @@ def list_carts(
     skip: int = 0,
     limit: int = 20,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     service = CartService(db)
-    carts = service.list(skip=skip, limit=limit)
+    carts = service.list(skip=skip, limit=limit, current_user=current_user)
     return [service.serialize(cart) for cart in carts]
 
 
@@ -41,9 +43,10 @@ def list_carts(
 def get_cart(
     cart_id: uuid.UUID,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     service = CartService(db)
-    cart = service.get_by_id(cart_id)
+    cart = service.get_by_id(cart_id, current_user=current_user)
     if not cart:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cart not found")
     return service.serialize(cart)
@@ -54,13 +57,14 @@ def patch_cart(
     cart_id: uuid.UUID,
     data: CartPatch,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     service = CartService(db)
-    cart = service.get_by_id(cart_id)
+    cart = service.get_by_id(cart_id, current_user=current_user)
     if not cart:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cart not found")
 
-    updated = service.patch(cart, data)
+    updated = service.patch(cart, data, current_user=current_user)
     return service.serialize(updated)
 
 
@@ -69,13 +73,14 @@ def replace_cart_products(
     cart_id: uuid.UUID,
     data: CartProductsReplace,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     service = CartService(db)
-    cart = service.get_by_id(cart_id)
+    cart = service.get_by_id(cart_id, current_user=current_user)
     if not cart:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cart not found")
 
-    updated = service.replace_products(cart, data.products)
+    updated = service.replace_products(cart, data.products, current_user=current_user)
     if updated is None:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     return service.serialize(updated)
@@ -85,22 +90,24 @@ def replace_cart_products(
 def checkout_cart(
     cart_id: uuid.UUID,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     service = CartService(db)
-    cart = service.get_by_id(cart_id)
+    cart = service.get_by_id(cart_id, current_user=current_user)
     if not cart:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cart not found")
-    return service.checkout(cart)
+    return service.checkout(cart, current_user=current_user)
 
 
 @router.delete("/{cart_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_cart(
     cart_id: uuid.UUID,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     service = CartService(db)
-    cart = service.get_by_id(cart_id)
+    cart = service.get_by_id(cart_id, current_user=current_user)
     if not cart:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cart not found")
-    service.delete(cart)
+    service.delete(cart, current_user=current_user)
     return None

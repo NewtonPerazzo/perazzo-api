@@ -24,8 +24,9 @@ router = APIRouter(
 def create_delivery_method(
     data: DeliveryMethodCreate,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    return DeliveryMethodService(db).create(data)
+    return DeliveryMethodService(db).create(data, current_user=current_user)
 
 
 @router.get("", response_model=list[DeliveryMethodResponse])
@@ -35,10 +36,11 @@ def list_delivery_methods(
     limit: int = 20,
     search: str | None = None,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     service = DeliveryMethodService(db)
-    items = service.list(skip=skip, limit=limit, search=search)
-    total = service.count(search=search)
+    items = service.list(skip=skip, limit=limit, search=search, current_user=current_user)
+    total = service.count(search=search, current_user=current_user)
     response.headers["X-Total-Count"] = str(total)
     return items
 
@@ -47,8 +49,9 @@ def list_delivery_methods(
 def get_delivery_method(
     delivery_method_id: uuid.UUID,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    method = DeliveryMethodService(db).get_by_id(delivery_method_id)
+    method = DeliveryMethodService(db).get_by_id(delivery_method_id, current_user=current_user)
     if not method:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Delivery method not found")
     return method
@@ -59,22 +62,24 @@ def update_delivery_method(
     delivery_method_id: uuid.UUID,
     data: DeliveryMethodUpdate,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     service = DeliveryMethodService(db)
-    method = service.get_by_id(delivery_method_id)
+    method = service.get_by_id(delivery_method_id, current_user=current_user)
     if not method:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Delivery method not found")
-    return service.update(method, data)
+    return service.update(method, data, current_user=current_user)
 
 
 @router.delete("/{delivery_method_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_delivery_method(
     delivery_method_id: uuid.UUID,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     service = DeliveryMethodService(db)
-    method = service.get_by_id(delivery_method_id)
+    method = service.get_by_id(delivery_method_id, current_user=current_user)
     if not method:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Delivery method not found")
-    service.delete(method)
+    service.delete(method, current_user=current_user)
     return None

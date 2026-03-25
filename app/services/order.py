@@ -15,6 +15,7 @@ from app.domain.models.order import Order
 from app.domain.models.order_item import OrderItem
 from app.domain.models.product import Product
 from app.services.courier import CourierService
+from app.services.store import StoreService
 from app.schemas.order import OrderCreate, OrderUpdate, ProductOrderCreate
 from app.util.calculations import calculate_order_item_total, calculate_order_total
 
@@ -25,23 +26,28 @@ class OrderService:
     def __init__(self, db: Session):
         self.db = db
 
-    def create(self, current_user=None, data: OrderCreate | None = None) -> Order:
+    def create(
+        self, current_user=None, data: OrderCreate | None = None, *, store_id: uuid.UUID | None = None
+    ) -> Order:
         if data is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Order payload is required",
             )
-        products_by_id = self._get_products_map([item.product_id for item in data.products])
+        scope_store_id = self._resolve_store_id(current_user=current_user, store_id=store_id)
+        products_by_id = self._get_products_map([item.product_id for item in data.products], store_id=scope_store_id)
         order_number = self._generate_order_number()
 
-        customer = self._get_or_create_customer_by_phone(data.customer)
+        customer = self._get_or_create_customer_by_phone(data.customer, store_id=scope_store_id)
 
         delivery_method = self._resolve_delivery_method(
             is_to_deliver=data.is_to_deliver,
             delivery_method_id=data.delivery_method_id,
+            store_id=scope_store_id,
         )
 
         order = Order(
+            store_id=scope_store_id,
             order_number=order_number,
             customer_id=customer.id,
             is_to_deliver=data.is_to_deliver,
@@ -67,16 +73,22 @@ class OrderService:
         self.db.refresh(order)
         return self.get_by_id(order.id)
 
-    def update(self, current_user=None, order: Order | None = None, data: OrderUpdate | None = None) -> Order:
+    def update(
+        self, current_user=None, order: Order | None = None, data: OrderUpdate | None = None, *, store_id: uuid.UUID | None = None
+    ) -> Order:
         if not order or not data:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Order and payload are required",
             )
-        products_by_id = self._get_products_map([item.product_id for item in data.products])
+        scope_store_id = self._resolve_store_id(current_user=current_user, store_id=store_id)
+        if order.store_id != scope_store_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+        products_by_id = self._get_products_map([item.product_id for item in data.products], store_id=scope_store_id)
         delivery_method = self._resolve_delivery_method(
             is_to_deliver=data.is_to_deliver,
             delivery_method_id=data.delivery_method_id,
+            store_id=scope_store_id,
         )
 
         order_items, items_total = self._build_order_items(data.products, products_by_id)
@@ -103,7 +115,10 @@ class OrderService:
         self.db.refresh(order)
         return self.get_by_id(order.id)
 
-    def delete(self, order: Order) -> None:
+    def delete(self, order: Order, *, current_user=None, store_id: uuid.UUID | None = None) -> None:
+        scope_store_id = self._resolve_store_id(current_user=current_user, store_id=store_id)
+        if order.store_id != scope_store_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
         if order.status == "deliveried":
             self._decrement_customer_sales(order.customer, order.total_price)
 
@@ -113,7 +128,10 @@ class OrderService:
         self.db.delete(order)
         self.db.commit()
 
-    def update_status(self, order: Order, status_value: str) -> Order:
+    def update_status(self, order: Order, status_value: str, *, current_user=None, store_id: uuid.UUID | None = None) -> Order:
+        scope_store_id = self._resolve_store_id(current_user=current_user, store_id=store_id)
+        if order.store_id != scope_store_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
         previous_status = order.status
 
         if previous_status != status_value and status_value in {"confirmed", "deliveried"} and not order.is_stock_reduced:
@@ -134,16 +152,28 @@ class OrderService:
         self.db.refresh(order)
         return self.get_by_id(order.id)
 
-    def preview_total(self, products: List[ProductOrderCreate]) -> float:
-        return self.preview_total_with_delivery(products=products, is_to_deliver=False, delivery_method_id=None)
+    def preview_total(
+        self, products: List[ProductOrderCreate], *, current_user=None, store_id: uuid.UUID | None = None
+    ) -> float:
+        return self.preview_total_with_delivery(
+            products=products,
+            is_to_deliver=False,
+            delivery_method_id=None,
+            current_user=current_user,
+            store_id=store_id,
+        )
 
     def preview_total_with_delivery(
         self,
         products: List[ProductOrderCreate],
         is_to_deliver: bool,
         delivery_method_id: uuid.UUID | None,
+        *,
+        current_user=None,
+        store_id: uuid.UUID | None = None,
     ) -> float:
-        products_by_id = self._get_products_map([item.product_id for item in products])
+        scope_store_id = self._resolve_store_id(current_user=current_user, store_id=store_id)
+        products_by_id = self._get_products_map([item.product_id for item in products], store_id=scope_store_id)
         item_totals: List[float] = []
 
         for item in products:
@@ -159,6 +189,7 @@ class OrderService:
         delivery_method = self._resolve_delivery_method(
             is_to_deliver=is_to_deliver,
             delivery_method_id=delivery_method_id,
+            store_id=scope_store_id,
         )
         return self._calculate_total_price(calculate_order_total(item_totals), delivery_method)
 
@@ -168,7 +199,11 @@ class OrderService:
         limit: int = 20,
         search: str | None = None,
         order_date: date | None = None,
+        *,
+        current_user=None,
+        store_id: uuid.UUID | None = None,
     ) -> List[Order]:
+        scope_store_id = self._resolve_store_id(current_user=current_user, store_id=store_id)
         stmt = (
             select(Order)
             .options(
@@ -183,15 +218,19 @@ class OrderService:
             .offset(skip)
             .limit(limit)
         )
-        stmt = self._apply_filters(stmt, search=search, order_date=order_date)
+        stmt = self._apply_filters(stmt, search=search, order_date=order_date, store_id=scope_store_id)
         return self.db.execute(stmt).scalars().all()
 
-    def count(self, search: str | None = None, order_date: date | None = None) -> int:
+    def count(
+        self, search: str | None = None, order_date: date | None = None, *, current_user=None, store_id: uuid.UUID | None = None
+    ) -> int:
+        scope_store_id = self._resolve_store_id(current_user=current_user, store_id=store_id)
         stmt = select(func.count(Order.id))
-        stmt = self._apply_filters(stmt, search=search, order_date=order_date)
+        stmt = self._apply_filters(stmt, search=search, order_date=order_date, store_id=scope_store_id)
         return int(self.db.execute(stmt).scalar_one())
 
-    def get_by_id(self, order_id: uuid.UUID) -> Order | None:
+    def get_by_id(self, order_id: uuid.UUID, *, current_user=None, store_id: uuid.UUID | None = None) -> Order | None:
+        scope_store_id = self._resolve_store_id(current_user=current_user, store_id=store_id)
         stmt = (
             select(Order)
             .options(
@@ -202,7 +241,7 @@ class OrderService:
                 .joinedload(OrderItem.product)
                 .selectinload(Product.categories)
             )
-            .where(Order.id == order_id)
+            .where(Order.id == order_id, Order.store_id == scope_store_id)
         )
         return self.db.execute(stmt).scalar_one_or_none()
 
@@ -211,7 +250,7 @@ class OrderService:
         if customer_email and str(customer_email).endswith(".local"):
             customer_email = None
         customer_orders_count = self.db.execute(
-            select(func.count(Order.id)).where(Order.customer_id == order.customer.id)
+            select(func.count(Order.id)).where(Order.customer_id == order.customer.id, Order.store_id == order.store_id)
         ).scalar_one()
 
         return {
@@ -248,12 +287,13 @@ class OrderService:
             "updated_at": order.updated_at,
         }
 
-    def _get_products_map(self, product_ids: List[uuid.UUID]) -> Dict[uuid.UUID, Product]:
+    def _get_products_map(self, product_ids: List[uuid.UUID], *, store_id: uuid.UUID) -> Dict[uuid.UUID, Product]:
         unique_ids = list(dict.fromkeys(product_ids))
         stmt = (
             select(Product)
             .options(selectinload(Product.categories))
             .where(Product.is_active.is_(True))
+            .where(Product.store_id == store_id)
             .where(Product.id.in_(unique_ids))
         )
         products = self.db.execute(stmt).scalars().all()
@@ -274,9 +314,12 @@ class OrderService:
             detail="Unable to generate order number",
         )
 
-    def _apply_filters(self, stmt, search: str | None, order_date: date | None):
+    def _apply_filters(self, stmt, search: str | None, order_date: date | None, *, store_id: uuid.UUID):
         target_date = order_date or datetime.now(ZoneInfo(LOCAL_TIMEZONE)).date()
-        stmt = stmt.where(func.date(func.timezone(LOCAL_TIMEZONE, Order.created_at)) == target_date)
+        stmt = stmt.where(
+            Order.store_id == store_id,
+            func.date(func.timezone(LOCAL_TIMEZONE, Order.created_at)) == target_date,
+        )
 
         if not search:
             return stmt
@@ -301,6 +344,8 @@ class OrderService:
         self,
         is_to_deliver: bool,
         delivery_method_id: uuid.UUID | None,
+        *,
+        store_id: uuid.UUID,
     ) -> DeliveryMethod | None:
         if not is_to_deliver:
             return None
@@ -312,7 +357,10 @@ class OrderService:
             )
 
         method = self.db.execute(
-            select(DeliveryMethod).where(DeliveryMethod.id == delivery_method_id)
+            select(DeliveryMethod).where(
+                DeliveryMethod.id == delivery_method_id,
+                DeliveryMethod.store_id == store_id,
+            )
         ).scalar_one_or_none()
 
         if not method:
@@ -357,13 +405,13 @@ class OrderService:
 
         return order_items, calculate_order_total(item_totals)
 
-    def _get_or_create_customer_by_phone(self, customer_data) -> Customer:
+    def _get_or_create_customer_by_phone(self, customer_data, *, store_id: uuid.UUID) -> Customer:
         phone = (customer_data.phone or "").strip()
         if phone and phone != "-":
             # Phone is not unique in legacy data, so use the newest record if duplicated.
             existing = self.db.execute(
                 select(Customer)
-                .where(Customer.phone == phone)
+                .where(Customer.phone == phone, Customer.store_id == store_id)
                 .order_by(Customer.created_at.desc())
                 .limit(1)
             ).scalars().first()
@@ -376,6 +424,7 @@ class OrderService:
                 return existing
 
         customer = Customer(
+            store_id=store_id,
             name=customer_data.name,
             phone=customer_data.phone,
             address=customer_data.address,
@@ -414,3 +463,13 @@ class OrderService:
             if product.stock is None:
                 continue
             product.stock = int(product.stock + item.amount)
+
+    def _resolve_store_id(self, *, current_user=None, store_id: uuid.UUID | None = None) -> uuid.UUID:
+        if store_id:
+            return store_id
+        if not current_user:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Store scope is required")
+        store = StoreService(self.db).get_by_user_id(current_user.id)
+        if not store:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Store not found")
+        return store.id

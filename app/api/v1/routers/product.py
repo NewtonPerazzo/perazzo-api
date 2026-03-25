@@ -25,10 +25,11 @@ router = APIRouter(
 )
 def create_product(
     data: ProductCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
   ):
     service = ProductService(db)
-    product = service.create(data)
+    product = service.create(data, current_user=current_user)
 
     return product
 
@@ -46,10 +47,16 @@ def list_products(
   sort_by: str | None = "created_at",
   sort_order: str | None = "desc",
   include_inactive: bool = True,
-  db: Session = Depends(get_db)
+  db: Session = Depends(get_db),
+  current_user=Depends(get_current_user),
 ):
     service = ProductService(db)
-    total = service.count(search=search, category_id=category_id, only_active=not include_inactive)
+    total = service.count(
+      search=search,
+      category_id=category_id,
+      only_active=not include_inactive,
+      current_user=current_user,
+    )
     products = service.list(
       skip=skip,
       limit=limit,
@@ -57,7 +64,8 @@ def list_products(
       category_id=category_id,
       sort_by=sort_by,
       sort_order=sort_order,
-      only_active=not include_inactive
+      only_active=not include_inactive,
+      current_user=current_user,
     )
 
     response.headers["X-Total-Count"] = str(total)
@@ -71,10 +79,11 @@ def list_products(
 )
 def get_product(
   slug: str,
-  db: Session = Depends(get_db)
+  db: Session = Depends(get_db),
+  current_user=Depends(get_current_user),
 ):
     service = ProductService(db)
-    product = service.get_by_slug(slug)
+    product = service.get_by_slug(slug, current_user=current_user)
 
     if not product:
       raise HTTPException(
@@ -92,10 +101,11 @@ def get_product(
 def update_product(
   product_id: uuid.UUID,
   data: ProductUpdate,
-  db: Session = Depends(get_db)
+  db: Session = Depends(get_db),
+  current_user=Depends(get_current_user),
 ):
   service = ProductService(db)
-  product = service.get_by_id(product_id)
+  product = service.get_by_id(product_id, current_user=current_user)
 
   if not product:
       raise HTTPException(
@@ -103,7 +113,7 @@ def update_product(
           detail="Product not found"
       )
 
-  updated_product = service.update(product, data)
+  updated_product = service.update(product, data, current_user=current_user)
 
   return updated_product
 
@@ -114,10 +124,11 @@ def update_product(
 )
 def delete_product(
   product_id: uuid.UUID,
-  db: Session = Depends(get_db)
+  db: Session = Depends(get_db),
+  current_user=Depends(get_current_user),
 ):
   service = ProductService(db)
-  product = service.get_by_id(product_id)
+  product = service.get_by_id(product_id, current_user=current_user)
 
   if not product:
     raise HTTPException(
@@ -125,7 +136,7 @@ def delete_product(
       detail="Product not found"
     )
   try:
-    service.delete(product)
+    service.delete(product, current_user=current_user)
   except IntegrityError:
     db.rollback()
     raise HTTPException(

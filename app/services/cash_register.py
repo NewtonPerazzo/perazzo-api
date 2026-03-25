@@ -113,6 +113,7 @@ class CashRegisterService:
             is_profit=True,
         )
         auto_entries = self._list_auto_orders(
+            store_id=store.id,
             period_start=period_start,
             period_end=period_end,
             period_view=period_view,
@@ -200,7 +201,9 @@ class CashRegisterService:
         )
         return self.db.execute(stmt).scalars().all()
 
-    def _list_auto_orders(self, period_start: date, period_end: date, period_view: CashPeriodView) -> List[dict]:
+    def _list_auto_orders(
+        self, *, store_id: uuid.UUID, period_start: date, period_end: date, period_view: CashPeriodView
+    ) -> List[dict]:
         stmt = (
             select(
                 func.coalesce(func.nullif(Order.payment_method, ""), "Sem forma").label("payment_method"),
@@ -209,6 +212,7 @@ class CashRegisterService:
             )
             .join(OrderItem, OrderItem.order_id == Order.id)
             .where(
+                Order.store_id == store_id,
                 func.date(Order.created_at) >= period_start,
                 func.date(Order.created_at) <= period_end,
                 Order.status != "canceled",

@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import String, Float, Integer, Text
+from sqlalchemy import String, Float, Integer, Text, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
@@ -12,6 +12,12 @@ class Product(Base, TimestampMixin, ActiveMixin):
     __tablename__ = "products"
 
     id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    store_id: Mapped[uuid.UUID] = mapped_column(
+      PGUUID(as_uuid=True),
+      ForeignKey("stores.id", ondelete="CASCADE"),
+      nullable=False,
+      index=True
+    )
     slug: Mapped[str] = mapped_column(
       String(140),
       unique=True,

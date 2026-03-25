@@ -12,6 +12,12 @@ class Order(Base):
     __tablename__ = "orders"
 
     id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    store_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("stores.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     order_number: Mapped[str] = mapped_column(String(7), unique=True, nullable=False, index=True)
 
     customer_id: Mapped[uuid.UUID] = mapped_column(

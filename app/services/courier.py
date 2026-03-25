@@ -153,7 +153,7 @@ class CourierService:
         ).scalars().all()
         riders_by_id = {rider.id: rider for rider in riders}
 
-        order_rows = self._query_delivery_rows(period_start=period_start, period_end=period_end)
+        order_rows = self._query_delivery_rows(store_id=store.id, period_start=period_start, period_end=period_end)
         delivery_map: Dict[uuid.UUID | None, Dict[str, float]] = {}
         for row in order_rows:
             key = row.courier_id
@@ -250,7 +250,7 @@ class CourierService:
         courier = self._resolve_courier_or_none(store_id=store.id, courier_id=courier_id)
         return courier.id if courier else None
 
-    def _query_delivery_rows(self, period_start: date, period_end: date):
+    def _query_delivery_rows(self, *, store_id: uuid.UUID, period_start: date, period_end: date):
         items_total_subquery = (
             select(
                 OrderItem.order_id.label("order_id"),
@@ -276,6 +276,7 @@ class CourierService:
             )
             .outerjoin(items_total_subquery, items_total_subquery.c.order_id == Order.id)
             .where(
+                Order.store_id == store_id,
                 func.date(Order.created_at) >= period_start,
                 func.date(Order.created_at) <= period_end,
                 Order.is_to_deliver.is_(True),
