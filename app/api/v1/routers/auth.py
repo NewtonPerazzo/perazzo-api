@@ -10,6 +10,7 @@ from app.services.user import UserService
 from app.util.jwt import create_access_token, create_email_verification_token, decode_email_verification_token, create_password_reset_token, decode_password_reset_token
 from app.core.dependencies import get_current_user
 from app.core.security import hash_password
+from app.util.password import validate_password_rules
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -107,12 +108,22 @@ def reset_password(token: str, new_password: str, db: Session = Depends(get_db))
     user = UserService(db).get_by_id(parsed_user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
-    user.password = hash_password(new_password)
+
+    try:
+        validated_password = validate_password_rules(new_password)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    user.password = hash_password(validated_password)
     user.reset_password_token = None
     db.commit()
     
     return {"message": "Password updated successfully"}
+
+
+@router.get("/me", response_model=UserResponse)
+def get_me(current_user: User = Depends(get_current_user)):
+    return current_user
 
 
 @router.put("/me", response_model=UserResponse)
