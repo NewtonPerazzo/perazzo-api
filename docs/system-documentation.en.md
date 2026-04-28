@@ -29,7 +29,11 @@ Protected endpoints depend on `get_current_user()` from `app/core/dependencies.p
 
 Email verification is handled by `POST /api/v1/auth/email/verify`. The endpoint decodes the email token, loads the user, marks `is_email_verified=True`, and clears `email_verification_token`.
 
-Password recovery uses `POST /api/v1/auth/password/forgot` to generate `reset_password_token`, and `POST /api/v1/auth/password/reset` to decode the token and replace the password hash.
+Password recovery uses `POST /api/v1/auth/password/forgot` to generate a `reset_password_token`, persist it on the user, and send a password reset email. The endpoint is implemented in `app/api/v1/routers/auth.py`; it calls `create_password_reset_token()` from `app/util/jwt.py` and `send_password_reset_email()` from `app/services/email.py`. The API never returns the token to the client. It returns a generic message so callers cannot discover whether an email is registered.
+
+Password reset links are built from `FRONTEND_URL` and point to `/reset-password?token=<token>`. SMTP settings are loaded in `app/core/config.py` through `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME`, and `SMTP_USE_TLS`. In local development, if SMTP is not configured, `app/services/email.py` writes the reset link to the API log instead of returning it in the HTTP response. In production, SMTP should be configured through Render environment variables, for example with Resend.
+
+`POST /api/v1/auth/password/reset` receives the token and the new password, decodes the token with `decode_password_reset_token()`, validates that it matches the user's latest saved `reset_password_token`, validates the password rules through `validate_password_rules()`, replaces the password hash through `hash_password()`, clears `reset_password_token`, and commits the change.
 
 User profile updates are handled by `PUT /api/v1/auth/me`, which requires authentication and delegates to `UserService.update()`.
 
@@ -190,4 +194,3 @@ Couriers can be linked to delivery orders. The summary calculates delivery count
 The core safety rule is store isolation. Services resolve `store_id` from the authenticated user or receive an explicit `store_id` for public catalog flows. Product, category, customer, order, cart, payment method, delivery method, courier, and cash register queries always filter by store.
 
 Authenticated routers use `dependencies=[Depends(get_current_user)]`, while public catalog routes validate the store by slug and catalog activation.
-

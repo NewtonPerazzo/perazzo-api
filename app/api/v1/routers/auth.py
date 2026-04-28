@@ -10,6 +10,7 @@ from app.services.user import UserService
 from app.util.jwt import create_access_token, create_email_verification_token, decode_email_verification_token, create_password_reset_token, decode_password_reset_token
 from app.core.dependencies import get_current_user
 from app.core.security import hash_password
+from app.services.email import EmailDeliveryError, send_password_reset_email
 from app.util.password import validate_password_rules
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -81,13 +82,20 @@ def forgot_password(email: str, db: Session = Depends(get_db)):
     service = UserService(db)
     user = service.get_by_email(email)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        return {"message": "If the email exists, a password reset link will be sent"}
     
     token = create_password_reset_token({"sub": str(user.id)})
     user.reset_password_token = token
     db.commit()
+
+    try:
+        send_password_reset_email(user.email, token)
+    except EmailDeliveryError:
+        user.reset_password_token = None
+        db.commit()
+        raise HTTPException(status_code=503, detail="Could not send password reset email")
     
-    return {"reset_token": token}
+    return {"message": "If the email exists, a password reset link will be sent"}
 
 
 @router.post("/password/reset")
@@ -106,8 +114,8 @@ def reset_password(token: str, new_password: str, db: Session = Depends(get_db))
         raise HTTPException(status_code=400, detail="Invalid token payload")
 
     user = UserService(db).get_by_id(parsed_user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    if not user or user.reset_password_token != token:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
 
     try:
         validated_password = validate_password_rules(new_password)

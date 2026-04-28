@@ -42,6 +42,7 @@ DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/perazzo_db
 SECRET_KEY=local-dev-secret-key
 EMAIL_SECRET_KEY=local-dev-email-secret-key
 RESET_SECRET_KEY=local-dev-reset-secret-key
+FRONTEND_URL=http://localhost:3000
 ```
 
 For running the API outside Docker, `.env.local` uses the host database port:
@@ -51,9 +52,24 @@ DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5433/perazzo_db
 SECRET_KEY=local-dev-secret-key
 EMAIL_SECRET_KEY=local-dev-email-secret-key
 RESET_SECRET_KEY=local-dev-reset-secret-key
+FRONTEND_URL=http://localhost:3000
 ```
 
 Use stronger secrets in production.
+
+Optional SMTP variables for password reset emails:
+
+```env
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USER=user
+SMTP_PASSWORD=password
+SMTP_FROM_EMAIL=no-reply@example.com
+SMTP_FROM_NAME=Perazzo Manager
+SMTP_USE_TLS=true
+```
+
+When SMTP is not configured in local development, password reset links are written to the API logs and are never returned in the HTTP response.
 
 ## Install and Run with Docker
 

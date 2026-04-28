@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Optional
 
 
 class Settings(BaseSettings):
@@ -24,6 +25,18 @@ class Settings(BaseSettings):
 
     # CORS
     BACKEND_CORS_ORIGINS: str = "*"
+
+    # FRONTEND
+    FRONTEND_URL: str = "http://localhost:3000"
+
+    # EMAIL
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: int = 587
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_FROM_EMAIL: Optional[str] = None
+    SMTP_FROM_NAME: str = "Perazzo Manager"
+    SMTP_USE_TLS: bool = True
 
     model_config = SettingsConfigDict(
         env_file=".env",

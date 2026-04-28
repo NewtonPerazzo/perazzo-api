@@ -29,7 +29,11 @@ Endpoints protegidos dependem de `get_current_user()` em `app/core/dependencies.
 
 A verificação de email é feita por `POST /api/v1/auth/email/verify`. O endpoint decodifica o token de email, carrega o usuário, marca `is_email_verified=True` e limpa `email_verification_token`.
 
-A recuperação de senha usa `POST /api/v1/auth/password/forgot` para gerar `reset_password_token`, e `POST /api/v1/auth/password/reset` para decodificar o token e substituir o hash da senha.
+A recuperação de senha usa `POST /api/v1/auth/password/forgot` para gerar um `reset_password_token`, salvar esse token no usuário e enviar o email de redefinição de senha. O endpoint fica em `app/api/v1/routers/auth.py`; ele chama `create_password_reset_token()` de `app/util/jwt.py` e `send_password_reset_email()` de `app/services/email.py`. A API nunca retorna o token para o cliente. Ela retorna uma mensagem genérica para impedir que alguém descubra se um email está cadastrado.
+
+Os links de redefinição são montados a partir de `FRONTEND_URL` e apontam para `/reset-password?token=<token>`. As configurações SMTP são carregadas em `app/core/config.py` pelas variáveis `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME` e `SMTP_USE_TLS`. Em desenvolvimento local, se SMTP não estiver configurado, `app/services/email.py` escreve o link de reset no log da API em vez de retorná-lo na resposta HTTP. Em produção, o SMTP deve ser configurado pelas variáveis de ambiente do Render, por exemplo usando Resend.
+
+`POST /api/v1/auth/password/reset` recebe o token e a nova senha, decodifica o token com `decode_password_reset_token()`, valida se ele corresponde ao último `reset_password_token` salvo no usuário, valida as regras da senha com `validate_password_rules()`, substitui o hash da senha com `hash_password()`, limpa `reset_password_token` e salva a alteração.
 
 A atualização do perfil usa `PUT /api/v1/auth/me`, exige autenticação e delega para `UserService.update()`.
 
@@ -190,4 +194,3 @@ Entregadores podem ser associados a pedidos de entrega. O resumo calcula quantid
 A principal regra de segurança é o isolamento por loja. Services resolvem `store_id` a partir do usuário autenticado ou recebem um `store_id` explícito nos fluxos públicos do catálogo. Consultas de produtos, categorias, clientes, pedidos, carrinhos, formas de pagamento, formas de entrega, entregadores e caixa sempre filtram por loja.
 
 Routers autenticados usam `dependencies=[Depends(get_current_user)]`, enquanto rotas públicas de catálogo validam a loja por slug e checam se o catálogo está ativo.
-
