@@ -110,7 +110,6 @@ class StoreService:
       "is_accepted_send_order_to_whatsapp": store.is_accepted_send_order_to_whatsapp,
       "business_hours": normalize_business_hours(store.business_hours),
       "is_open_now": self.is_open_now(store),
-      "user_id": store.user_id,
       "created_at": store.created_at,
     }
 

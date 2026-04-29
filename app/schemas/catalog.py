@@ -80,6 +80,7 @@ class CatalogCartCustomerResponse(BaseModel):
 
 class CatalogCartResponse(BaseModel):
     id: UUID
+    cart_secret: str
     products: list[CatalogCartProductResponse]
     customer: CatalogCartCustomerResponse | None = None
     is_to_deliver: bool | None = None

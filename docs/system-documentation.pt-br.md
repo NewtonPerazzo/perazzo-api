@@ -21,19 +21,21 @@ O backend é isolado por loja. A maioria das entidades autenticadas pertence a u
 
 ## Fluxo de Autenticação e Criação de Conta
 
-A criação de conta começa em `POST /api/v1/auth/register`, implementado em `app/api/v1/routers/auth.py`. O router recebe `UserCreate`, chama `UserService.create()` em `app/services/user.py`, cria o hash da senha via `app/core/security.py`, salva o usuário e gera um token de verificação de email com `create_email_verification_token()` em `app/util/jwt.py`.
+A criação de conta começa em `POST /api/v1/auth/register`, implementado em `app/api/v1/routers/auth.py`. O router recebe `UserCreate`, chama `UserService.create()` em `app/services/user.py`, cria o hash da senha via `app/core/security.py`, salva o usuário, gera um token de verificação de email com `create_email_verification_token()` em `app/util/jwt.py`, salva apenas o hash HMAC desse token com `app/util/token_hash.py` e envia o link por `send_email_verification_email()` em `app/services/email.py`. O token bruto de verificação nunca é retornado pela API.
 
 O login usa `POST /api/v1/auth/login`. O router chama `UserService.authenticate()`, que busca o usuário por email e valida a senha. Se estiver correto, o router retorna um bearer token criado por `create_access_token()`. O payload do token guarda o id do usuário em `sub`.
 
 Endpoints protegidos dependem de `get_current_user()` em `app/core/dependencies.py`. Essa dependência lê o header `Authorization: Bearer <token>`, decodifica o token com `decode_access_token()`, valida o UUID em `sub` e carrega o usuário com `UserService.get_by_id()`.
 
-A verificação de email é feita por `POST /api/v1/auth/email/verify`. O endpoint decodifica o token de email, carrega o usuário, marca `is_email_verified=True` e limpa `email_verification_token`.
+A verificação de email é feita por `POST /api/v1/auth/email/verify`. O endpoint decodifica o token de email, carrega o usuário, valida o token contra o hash salvo, marca `is_email_verified=True` e limpa `email_verification_token`.
 
-A recuperação de senha usa `POST /api/v1/auth/password/forgot` para gerar um `reset_password_token`, salvar esse token no usuário e enviar o email de redefinição de senha. O endpoint fica em `app/api/v1/routers/auth.py`; ele chama `create_password_reset_token()` de `app/util/jwt.py` e `send_password_reset_email()` de `app/services/email.py`. A API nunca retorna o token para o cliente. Ela retorna uma mensagem genérica para impedir que alguém descubra se um email está cadastrado.
+A recuperação de senha usa `POST /api/v1/auth/password/forgot` para gerar um `reset_password_token`, salvar apenas o hash HMAC desse token no usuário e enviar o email de redefinição de senha. O endpoint fica em `app/api/v1/routers/auth.py`; ele chama `create_password_reset_token()` de `app/util/jwt.py` e `send_password_reset_email()` de `app/services/email.py`. A API nunca retorna o token para o cliente. Ela retorna uma mensagem genérica para impedir que alguém descubra se um email está cadastrado.
 
 Os links de redefinição são montados a partir de `FRONTEND_URL` e apontam para `/reset-password?token=<token>`. As configurações SMTP são carregadas em `app/core/config.py` pelas variáveis `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME` e `SMTP_USE_TLS`. Em desenvolvimento local, se SMTP não estiver configurado, `app/services/email.py` escreve o link de reset no log da API em vez de retorná-lo na resposta HTTP. Em produção, o SMTP deve ser configurado pelas variáveis de ambiente do Render, por exemplo usando Resend.
 
-`POST /api/v1/auth/password/reset` recebe o token e a nova senha, decodifica o token com `decode_password_reset_token()`, valida se ele corresponde ao último `reset_password_token` salvo no usuário, valida as regras da senha com `validate_password_rules()`, substitui o hash da senha com `hash_password()`, limpa `reset_password_token` e salva a alteração.
+Em produção, `FRONTEND_URL` e `BACKEND_CORS_ORIGINS` devem incluir `https://perazzo-manager.vercel.app`.
+
+`POST /api/v1/auth/password/reset` recebe o token e a nova senha, decodifica o token com `decode_password_reset_token()`, valida se ele corresponde ao último hash salvo, valida as regras da senha com `validate_password_rules()`, substitui o hash da senha com `hash_password()`, limpa `reset_password_token` e salva a alteração. Login e recuperação de senha também usam limites simples de requisição em `app/core/rate_limit.py`.
 
 A atualização do perfil usa `PUT /api/v1/auth/me`, exige autenticação e delega para `UserService.update()`.
 
@@ -107,6 +109,8 @@ Endpoints públicos de carrinho ficam em `app/api/v1/routers/catalog.py`:
 - `POST /api/v1/catalog/{store_slug}/carts/{cart_id}/preview-total`
 - `POST /api/v1/catalog/{store_slug}/carts/{cart_id}/checkout`
 - `DELETE /api/v1/catalog/{store_slug}/carts/{cart_id}`
+
+Endpoints públicos de carrinho exigem `cart_id` e `cart_secret`. `CartService.create()` gera `cart_secret` com `secrets.token_urlsafe()`. A API retorna esse segredo quando o carrinho é criado, e leituras, atualizações, preview de total, checkout e remoção exigem `cart_secret` como query parameter. Assim, o UUID do carrinho sozinho não funciona como autorização completa.
 
 `CartService.create()` valida se o produto existe, pertence à loja, está ativo e tem estoque suficiente. `replace_products()` apaga o carrinho quando a lista de produtos fica vazia. `checkout()` exige produtos, nome do cliente, telefone do cliente e forma de pagamento. O checkout público ainda valida método de entrega e endereço quando entrega é selecionada, resolve a forma de pagamento por id, cria um payload `OrderCreate`, delega para `OrderService.create()` e apaga o carrinho.
 

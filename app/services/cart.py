@@ -1,4 +1,5 @@
 import uuid
+from secrets import token_urlsafe
 from typing import Dict, List
 
 from fastapi import HTTPException, status
@@ -33,7 +34,7 @@ class CartService:
         unit_price = float(product.price)
         item_total = calculate_order_item_total(data.product.amount, unit_price)
 
-        cart = Cart(store_id=scope_store_id, total_price=item_total)
+        cart = Cart(store_id=scope_store_id, cart_secret=token_urlsafe(32), total_price=item_total)
         cart.items = [
             CartItem(
                 product_id=product.id,
@@ -166,6 +167,7 @@ class CartService:
 
         return {
             "id": cart.id,
+            "cart_secret": cart.cart_secret,
             "products": [
                 {
                     "product": item.product,

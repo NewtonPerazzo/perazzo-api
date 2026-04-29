@@ -12,6 +12,7 @@ class Cart(Base):
     __tablename__ = "carts"
 
     id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    cart_secret: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     store_id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("stores.id", ondelete="CASCADE"),

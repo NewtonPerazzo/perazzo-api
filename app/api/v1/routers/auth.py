@@ -1,23 +1,27 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from jose import JWTError
 from sqlalchemy.orm import Session
 from uuid import UUID
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.domain.models.user import User
 from app.schemas.user import UserCreate, UserLogin, UserUpdate, UserResponse
 from app.services.user import UserService
 from app.util.jwt import create_access_token, create_email_verification_token, decode_email_verification_token, create_password_reset_token, decode_password_reset_token
 from app.core.dependencies import get_current_user
+from app.core.rate_limit import login_rate_limit, password_recovery_rate_limit
 from app.core.security import hash_password
-from app.services.email import EmailDeliveryError, send_password_reset_email
+from app.services.email import EmailDeliveryError, send_email_verification_email, send_password_reset_email
+from app.util.token_hash import hash_token, verify_token_hash
 from app.util.password import validate_password_rules
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
 @router.post("/login")
-def login(data: UserLogin, db: Session = Depends(get_db)):
+def login(data: UserLogin, request: Request, db: Session = Depends(get_db)):
+  login_rate_limit(request)
   service = UserService(db)
   user = service.authenticate(data.email, data.password)
 
@@ -40,10 +44,17 @@ def register(data: UserCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=str(e))
     
     token = create_email_verification_token({"sub": str(user.id)})
-    user.email_verification_token = token
+    user.email_verification_token = hash_token(token, settings.EMAIL_SECRET_KEY)
     db.commit()
+
+    try:
+        send_email_verification_email(user.email, token)
+    except EmailDeliveryError:
+        user.email_verification_token = None
+        db.commit()
+        raise HTTPException(status_code=503, detail="Could not send email verification email")
     
-    return {"id": user.id, "email": user.email, "email_verification_token": token}
+    return {"id": user.id, "email": user.email, "message": "Account created. Check your email to verify your account"}
 
 
 @router.post("/email/verify")
@@ -62,8 +73,8 @@ def verify_email(token: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Invalid token payload")
 
     user = UserService(db).get_by_id(parsed_user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    if not user or not verify_token_hash(token, user.email_verification_token, settings.EMAIL_SECRET_KEY):
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
     
     user.is_email_verified = True
     user.email_verification_token = None
@@ -78,14 +89,15 @@ def logout(db: Session = Depends(get_db)):
 
 
 @router.post("/password/forgot")
-def forgot_password(email: str, db: Session = Depends(get_db)):
+def forgot_password(email: str, request: Request, db: Session = Depends(get_db)):
+    password_recovery_rate_limit(request)
     service = UserService(db)
     user = service.get_by_email(email)
     if not user:
         return {"message": "If the email exists, a password reset link will be sent"}
     
     token = create_password_reset_token({"sub": str(user.id)})
-    user.reset_password_token = token
+    user.reset_password_token = hash_token(token, settings.RESET_SECRET_KEY)
     db.commit()
 
     try:
@@ -99,7 +111,8 @@ def forgot_password(email: str, db: Session = Depends(get_db)):
 
 
 @router.post("/password/reset")
-def reset_password(token: str, new_password: str, db: Session = Depends(get_db)):
+def reset_password(token: str, new_password: str, request: Request, db: Session = Depends(get_db)):
+    password_recovery_rate_limit(request)
     try:
         payload = decode_password_reset_token(token)
     except JWTError:
@@ -114,7 +127,7 @@ def reset_password(token: str, new_password: str, db: Session = Depends(get_db))
         raise HTTPException(status_code=400, detail="Invalid token payload")
 
     user = UserService(db).get_by_id(parsed_user_id)
-    if not user or user.reset_password_token != token:
+    if not user or not verify_token_hash(token, user.reset_password_token, settings.RESET_SECRET_KEY):
         raise HTTPException(status_code=400, detail="Invalid or expired token")
 
     try:

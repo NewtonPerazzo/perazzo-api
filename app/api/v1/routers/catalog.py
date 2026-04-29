@@ -1,9 +1,10 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.rate_limit import catalog_cart_rate_limit
 from app.schemas.cart import CartCreate, CartProductsReplace
 from app.schemas.catalog import (
     CatalogCartCheckoutRequest,
@@ -128,6 +129,7 @@ def _serialize_cart(cart: dict) -> CatalogCartResponse:
 
     return CatalogCartResponse(
         id=cart["id"],
+        cart_secret=cart.get("cart_secret") or "",
         products=cart_products,
         customer=customer_data,
         is_to_deliver=cart.get("is_to_deliver"),
@@ -138,6 +140,11 @@ def _serialize_cart(cart: dict) -> CatalogCartResponse:
         created_at=cart["created_at"],
         updated_at=cart["updated_at"],
     )
+
+
+def _verify_catalog_cart_secret(cart, cart_secret: str | None) -> None:
+    if not cart.cart_secret or not cart_secret or cart.cart_secret != cart_secret:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cart not found")
 
 
 def _build_categories_payload(product_service: ProductService, categories: list, search: str | None, *, store_id: uuid.UUID):
@@ -326,8 +333,10 @@ def list_catalog_delivery_methods(
 def create_catalog_cart(
     store_slug: str,
     data: CartCreate,
+    request: Request,
     db: Session = Depends(get_db),
 ):
+    catalog_cart_rate_limit(request)
     store = _get_active_store_or_404(store_slug, db)
     _ensure_store_open_for_cart_actions(store, db)
     cart = CartService(db).create(data, store_id=store.id)
@@ -338,14 +347,18 @@ def create_catalog_cart(
 def get_catalog_cart(
     store_slug: str,
     cart_id: uuid.UUID,
+    cart_secret: str,
+    request: Request,
     db: Session = Depends(get_db),
 ):
+    catalog_cart_rate_limit(request)
     store = _get_active_store_or_404(store_slug, db)
 
     service = CartService(db)
     cart = service.get_by_id(cart_id, store_id=store.id)
     if not cart:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cart not found")
+    _verify_catalog_cart_secret(cart, cart_secret)
 
     return _serialize_cart(service.serialize(cart))
 
@@ -355,8 +368,11 @@ def replace_catalog_cart_products(
     store_slug: str,
     cart_id: uuid.UUID,
     data: CartProductsReplace,
+    cart_secret: str,
+    request: Request,
     db: Session = Depends(get_db),
 ):
+    catalog_cart_rate_limit(request)
     store = _get_active_store_or_404(store_slug, db)
     _ensure_store_open_for_cart_actions(store, db)
 
@@ -364,6 +380,7 @@ def replace_catalog_cart_products(
     cart = service.get_by_id(cart_id, store_id=store.id)
     if not cart:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cart not found")
+    _verify_catalog_cart_secret(cart, cart_secret)
 
     updated = service.replace_products(cart, data.products, store_id=store.id)
     if updated is None:
@@ -377,8 +394,11 @@ def preview_catalog_cart_total(
     store_slug: str,
     cart_id: uuid.UUID,
     data: CatalogCartPreviewTotalRequest,
+    cart_secret: str,
+    request: Request,
     db: Session = Depends(get_db),
 ):
+    catalog_cart_rate_limit(request)
     store = _get_active_store_or_404(store_slug, db)
     _ensure_store_open_for_cart_actions(store, db)
 
@@ -386,6 +406,7 @@ def preview_catalog_cart_total(
     cart = cart_service.get_by_id(cart_id, store_id=store.id)
     if not cart:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cart not found")
+    _verify_catalog_cart_secret(cart, cart_secret)
 
     products = [ProductOrderCreate(product_id=item.product_id, amount=item.amount) for item in cart.items]
     total = OrderService(db).preview_total_with_delivery(
@@ -402,8 +423,11 @@ def checkout_catalog_cart(
     store_slug: str,
     cart_id: uuid.UUID,
     data: CatalogCartCheckoutRequest,
+    cart_secret: str,
+    request: Request,
     db: Session = Depends(get_db),
 ):
+    catalog_cart_rate_limit(request)
     store = _get_active_store_or_404(store_slug, db)
     _ensure_store_open_for_cart_actions(store, db)
 
@@ -411,6 +435,7 @@ def checkout_catalog_cart(
     cart = cart_service.get_by_id(cart_id, store_id=store.id)
     if not cart:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cart not found")
+    _verify_catalog_cart_secret(cart, cart_secret)
 
     if not cart.items:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cart has no products")
@@ -457,14 +482,18 @@ def checkout_catalog_cart(
 def delete_catalog_cart(
     store_slug: str,
     cart_id: uuid.UUID,
+    cart_secret: str,
+    request: Request,
     db: Session = Depends(get_db),
 ):
+    catalog_cart_rate_limit(request)
     store = _get_active_store_or_404(store_slug, db)
 
     service = CartService(db)
     cart = service.get_by_id(cart_id, store_id=store.id)
     if not cart:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cart not found")
+    _verify_catalog_cart_secret(cart, cart_secret)
 
     service.delete(cart, store_id=store.id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

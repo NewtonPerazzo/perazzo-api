@@ -43,6 +43,7 @@ SECRET_KEY=local-dev-secret-key
 EMAIL_SECRET_KEY=local-dev-email-secret-key
 RESET_SECRET_KEY=local-dev-reset-secret-key
 FRONTEND_URL=http://localhost:3000
+BACKEND_CORS_ORIGINS=http://localhost:3000
 ```
 
 For running the API outside Docker, `.env.local` uses the host database port:
@@ -53,11 +54,12 @@ SECRET_KEY=local-dev-secret-key
 EMAIL_SECRET_KEY=local-dev-email-secret-key
 RESET_SECRET_KEY=local-dev-reset-secret-key
 FRONTEND_URL=http://localhost:3000
+BACKEND_CORS_ORIGINS=http://localhost:3000
 ```
 
 Use stronger secrets in production.
 
-Optional SMTP variables for password reset emails:
+Optional SMTP variables for account verification and password reset emails:
 
 ```env
 SMTP_HOST=smtp.example.com
@@ -69,7 +71,14 @@ SMTP_FROM_NAME=Perazzo Manager
 SMTP_USE_TLS=true
 ```
 
-When SMTP is not configured in local development, password reset links are written to the API logs and are never returned in the HTTP response.
+When SMTP is not configured in local development, verification and password reset links are written to the API logs and are never returned in the HTTP response. In production, set `APP_DEBUG=false`, configure `BACKEND_CORS_ORIGINS` with the exact frontend domains, and keep SMTP secrets only in the deployment environment.
+
+Production frontend settings for Render:
+
+```env
+FRONTEND_URL=https://perazzo-manager.vercel.app
+BACKEND_CORS_ORIGINS=https://perazzo-manager.vercel.app
+```
 
 ## Install and Run with Docker
 

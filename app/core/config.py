@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     # APP
     APP_NAME: str = "Perazzo API"
     APP_ENV: str = "development"
-    APP_DEBUG: bool = True
+    APP_DEBUG: bool = False
     API_V1_PREFIX: str = "/api/v1"
 
     # DATABASE
@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     RESET_EXPIRE_MINUTES: int = 15
 
     # CORS
-    BACKEND_CORS_ORIGINS: str = "*"
+    BACKEND_CORS_ORIGINS: str = "http://localhost:3000"
 
     # FRONTEND
     FRONTEND_URL: str = "http://localhost:3000"
