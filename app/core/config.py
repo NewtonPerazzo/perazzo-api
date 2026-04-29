@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     RESET_EXPIRE_MINUTES: int = 15
 
     # CORS
-    BACKEND_CORS_ORIGINS: str = "http://localhost:3000"
+    BACKEND_CORS_ORIGINS: str = "http://localhost:3000,https://perazzo-manager.vercel.app"
 
     # FRONTEND
     FRONTEND_URL: str = "http://localhost:3000"

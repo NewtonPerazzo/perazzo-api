@@ -11,7 +11,7 @@ app = FastAPI(
 )
 
 cors_origins = [
-    origin.strip()
+    origin.strip().rstrip("/")
     for origin in settings.BACKEND_CORS_ORIGINS.split(",")
     if origin.strip()
 ]

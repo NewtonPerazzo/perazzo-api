@@ -43,7 +43,7 @@ SECRET_KEY=local-dev-secret-key
 EMAIL_SECRET_KEY=local-dev-email-secret-key
 RESET_SECRET_KEY=local-dev-reset-secret-key
 FRONTEND_URL=http://localhost:3000
-BACKEND_CORS_ORIGINS=http://localhost:3000
+BACKEND_CORS_ORIGINS=http://localhost:3000,https://perazzo-manager.vercel.app
 ```
 
 For running the API outside Docker, `.env.local` uses the host database port:
@@ -54,7 +54,7 @@ SECRET_KEY=local-dev-secret-key
 EMAIL_SECRET_KEY=local-dev-email-secret-key
 RESET_SECRET_KEY=local-dev-reset-secret-key
 FRONTEND_URL=http://localhost:3000
-BACKEND_CORS_ORIGINS=http://localhost:3000
+BACKEND_CORS_ORIGINS=http://localhost:3000,https://perazzo-manager.vercel.app
 ```
 
 Use stronger secrets in production.
