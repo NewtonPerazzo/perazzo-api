@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.plans import ensure_advanced_feature_access
 from app.schemas.cash_register import (
     CashPeriodView,
     CashRegisterEntryCreate,
@@ -29,6 +30,7 @@ def get_cash_register_summary(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    ensure_advanced_feature_access(current_user, "Cash register")
     service = CashRegisterService(db)
     safe_date = target_date or datetime.now().date()
     return service.get_summary(current_user=current_user, target_date=safe_date, period_view=period_view)
@@ -40,6 +42,7 @@ def create_cash_register_entry(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    ensure_advanced_feature_access(current_user, "Cash register")
     return CashRegisterService(db).create_entry(current_user=current_user, data=data)
 
 
@@ -50,6 +53,7 @@ def update_cash_register_entry(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    ensure_advanced_feature_access(current_user, "Cash register")
     return CashRegisterService(db).update_entry(
         current_user=current_user,
         entry_id=entry_id,
@@ -63,5 +67,6 @@ def delete_cash_register_entry(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    ensure_advanced_feature_access(current_user, "Cash register")
     CashRegisterService(db).delete_entry(current_user=current_user, entry_id=entry_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

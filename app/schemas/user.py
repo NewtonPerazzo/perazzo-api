@@ -2,6 +2,7 @@ from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional
 from datetime import date, datetime
 from uuid import UUID
+from typing import Any
 from app.util.password import validate_password_rules
 
 
@@ -49,6 +50,9 @@ class UserResponse(BaseModel):
     photo: Optional[str]
     is_active: bool
     is_email_verified: bool
+    plan: str
+    plan_started_at: Optional[datetime] = None
+    plan_details: Optional[dict[str, Any]] = None
     created_at: datetime
 
     class Config:

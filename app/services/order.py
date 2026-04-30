@@ -9,6 +9,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.plans import ensure_advanced_feature_access, ensure_monthly_order_limit, get_store_owner
 from app.domain.models.customer import Customer
 from app.domain.models.delivery_method import DeliveryMethod
 from app.domain.models.order import Order
@@ -35,6 +36,7 @@ class OrderService:
                 detail="Order payload is required",
             )
         scope_store_id = self._resolve_store_id(current_user=current_user, store_id=store_id)
+        ensure_monthly_order_limit(self.db, current_user, scope_store_id)
         products_by_id = self._get_products_map([item.product_id for item in data.products], store_id=scope_store_id)
         order_number = self._generate_order_number()
 
@@ -71,7 +73,7 @@ class OrderService:
         self.db.add(order)
         self.db.commit()
         self.db.refresh(order)
-        return self.get_by_id(order.id)
+        return self.get_by_id(order.id, store_id=scope_store_id)
 
     def update(
         self, current_user=None, order: Order | None = None, data: OrderUpdate | None = None, *, store_id: uuid.UUID | None = None
@@ -82,6 +84,9 @@ class OrderService:
                 detail="Order and payload are required",
             )
         scope_store_id = self._resolve_store_id(current_user=current_user, store_id=store_id)
+        plan_user = current_user or get_store_owner(self.db, scope_store_id)
+        if plan_user:
+            ensure_advanced_feature_access(plan_user, "Order editing")
         if order.store_id != scope_store_id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
         products_by_id = self._get_products_map([item.product_id for item in data.products], store_id=scope_store_id)
@@ -113,7 +118,7 @@ class OrderService:
 
         self.db.commit()
         self.db.refresh(order)
-        return self.get_by_id(order.id)
+        return self.get_by_id(order.id, store_id=scope_store_id)
 
     def delete(self, order: Order, *, current_user=None, store_id: uuid.UUID | None = None) -> None:
         scope_store_id = self._resolve_store_id(current_user=current_user, store_id=store_id)
@@ -130,6 +135,9 @@ class OrderService:
 
     def update_status(self, order: Order, status_value: str, *, current_user=None, store_id: uuid.UUID | None = None) -> Order:
         scope_store_id = self._resolve_store_id(current_user=current_user, store_id=store_id)
+        plan_user = current_user or get_store_owner(self.db, scope_store_id)
+        if plan_user:
+            ensure_advanced_feature_access(plan_user, "Order editing")
         if order.store_id != scope_store_id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
         previous_status = order.status
@@ -150,7 +158,7 @@ class OrderService:
         order.status = status_value
         self.db.commit()
         self.db.refresh(order)
-        return self.get_by_id(order.id)
+        return self.get_by_id(order.id, store_id=scope_store_id)
 
     def preview_total(
         self, products: List[ProductOrderCreate], *, current_user=None, store_id: uuid.UUID | None = None

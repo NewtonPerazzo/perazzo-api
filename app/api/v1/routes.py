@@ -10,6 +10,7 @@ from app.api.v1.routers.courier import router as courier_router
 from app.api.v1.routers.delivery_method import router as delivery_method_router
 from app.api.v1.routers.order import router as order_router
 from app.api.v1.routers.payment_method import router as payment_method_router
+from app.api.v1.routers.plans import router as plans_router
 from app.api.v1.routers.product import router as product_router
 from app.api.v1.routers.store import router as store_router
 
@@ -25,5 +26,6 @@ api_router.include_router(courier_router)
 api_router.include_router(delivery_method_router)
 api_router.include_router(order_router)
 api_router.include_router(payment_method_router)
+api_router.include_router(plans_router)
 api_router.include_router(product_router)
 api_router.include_router(store_router)

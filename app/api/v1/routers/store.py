@@ -46,7 +46,7 @@ def update_my_store(
       detail="Store not found"
     )
 
-  updated = service.update(store, data)
+  updated = service.update(store, data, current_user=current_user)
   return service.serialize(updated)
 
 

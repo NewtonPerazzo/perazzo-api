@@ -28,7 +28,8 @@ class UserService:
         password=hash_password(data.password),
         birth_date=data.birth_date,
         photo=data.photo,
-        is_email_verified=True
+        is_email_verified=True,
+        plan="free",
     )
 
     self.db.add(user)

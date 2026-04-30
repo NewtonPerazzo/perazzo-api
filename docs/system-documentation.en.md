@@ -21,23 +21,37 @@ The backend is store-scoped. Most authenticated entities belong to one `store_id
 
 ## Authentication and Account Flow
 
-Account creation starts at `POST /api/v1/auth/register`, implemented in `app/api/v1/routers/auth.py`. The router receives `UserCreate`, calls `UserService.create()` in `app/services/user.py`, hashes the password through `app/core/security.py`, stores the user, generates an email verification token with `create_email_verification_token()` from `app/util/jwt.py`, stores only its HMAC hash through `app/util/token_hash.py`, and sends the verification link through `send_email_verification_email()` in `app/services/email.py`. The raw verification token is never returned by the API.
+Account creation starts at `POST /api/v1/auth/register`, implemented in `app/api/v1/routers/auth.py`. The router receives `UserCreate`, calls `UserService.create()` in `app/services/user.py`, hashes the password through `app/core/security.py`, stores the user, and assigns the default `free` plan. Email verification is currently outside the registration flow; email is used only for password reset.
 
 Login uses `POST /api/v1/auth/login`. The router calls `UserService.authenticate()`, which loads the user by email and verifies the password. If valid, the router returns a bearer token created by `create_access_token()`. The token payload stores the user id in `sub`.
 
 Protected endpoints depend on `get_current_user()` from `app/core/dependencies.py`. That dependency reads the `Authorization: Bearer <token>` header, decodes the token with `decode_access_token()`, validates the `sub` UUID, and loads the user with `UserService.get_by_id()`.
 
-Email verification is handled by `POST /api/v1/auth/email/verify`. The endpoint decodes the email token, loads the user, verifies the token against the stored hash, marks `is_email_verified=True`, and clears `email_verification_token`.
+Email verification is still available in `POST /api/v1/auth/email/verify` for future reactivation. The endpoint decodes the email token, loads the user, verifies the token against the stored hash, marks `is_email_verified=True`, and clears `email_verification_token`.
 
 Password recovery uses `POST /api/v1/auth/password/forgot` to generate a `reset_password_token`, persist only its HMAC hash on the user, and send a password reset email. The endpoint is implemented in `app/api/v1/routers/auth.py`; it calls `create_password_reset_token()` from `app/util/jwt.py` and `send_password_reset_email()` from `app/services/email.py`. The API never returns the token to the client. It returns a generic message so callers cannot discover whether an email is registered.
 
-Password reset links are built from `FRONTEND_URL` and point to `/reset-password?token=<token>`. SMTP settings are loaded in `app/core/config.py` through `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME`, and `SMTP_USE_TLS`. In local development, if SMTP is not configured, `app/services/email.py` writes the reset link to the API log instead of returning it in the HTTP response. In production, SMTP should be configured through Render environment variables, for example with Resend.
+Password reset links are built from `FRONTEND_URL` and point to `/reset-password?token=<token>`. SMTP settings are loaded in `app/core/config.py` through `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME`, and `SMTP_USE_TLS`. If SMTP is not configured or delivery fails, `app/services/email.py` raises `EmailDeliveryError`; reset tokens are not returned in HTTP responses or logged.
 
 For production, `FRONTEND_URL` and `BACKEND_CORS_ORIGINS` should both include `https://perazzo-manager.vercel.app`.
 
 `POST /api/v1/auth/password/reset` receives the token and the new password, decodes the token with `decode_password_reset_token()`, validates that it matches the user's latest saved token hash, validates the password rules through `validate_password_rules()`, replaces the password hash through `hash_password()`, clears `reset_password_token`, and commits the change. Login and password recovery endpoints also use lightweight in-memory rate limits from `app/core/rate_limit.py`.
 
 User profile updates are handled by `PUT /api/v1/auth/me`, which requires authentication and delegates to `UserService.update()`.
+
+## Plans and Subscription Rules
+
+Plan rules are centralized in `app/core/plans.py`. The available plans are `free`, `essential`, and `pro`, exposed as `PLAN_CATALOG` with price, duration, monthly order limit, advanced-feature trial duration, and feature flags. Helper functions include `is_free()`, `is_essential()`, `is_pro()`, `get_plan()`, `serialize_plan()`, `ensure_monthly_order_limit()`, and `ensure_advanced_feature_access()`.
+
+New users are created on the `free` plan by `UserService.create()` in `app/services/user.py`. The `users` table stores `plan` and `plan_started_at`, added by `migrations/versions/ab2c3d4e5f6a_add_user_plan_fields.py`. `GET /api/v1/auth/me` returns the current `plan`, `plan_started_at`, and serialized `plan_details`. `GET /api/v1/plans` returns the public plan catalog.
+
+Current limits:
+
+- Free: R$0, indefinite account, 10 orders per month, catalog unlimited, WhatsApp orders/order editing/cash register/couriers available for 7 days after `plan_started_at`.
+- Essential: R$25 per 30 days, 50 orders per month, advanced features unlimited.
+- Pro: R$50 per 30 days, unlimited orders and advanced features.
+
+Enforcement is backend-side. `OrderService.create()` in `app/services/order.py` calls `ensure_monthly_order_limit()` for authenticated and public catalog checkouts. `OrderService.update()` blocks order editing without advanced-feature access. `app/api/v1/routers/cash_register.py` and `app/api/v1/routers/courier.py` block cash register and courier routes without advanced-feature access. `StoreService.create()` and `StoreService.update()` block enabling WhatsApp order sending without advanced-feature access, and store serialization disables that flag for expired Free trials.
 
 ## Store Flow
 

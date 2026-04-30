@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.plans import ensure_advanced_feature_access
 from app.schemas.courier import (
     CourierAdjustmentCreate,
     CourierAdjustmentResponse,
@@ -32,6 +33,7 @@ def create_courier(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    ensure_advanced_feature_access(current_user, "Courier management")
     return CourierService(db).create(current_user=current_user, data=data)
 
 
@@ -44,6 +46,7 @@ def list_couriers(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    ensure_advanced_feature_access(current_user, "Courier management")
     service = CourierService(db)
     couriers = service.list(current_user=current_user, skip=skip, limit=limit, search=search)
     total = service.count(current_user=current_user, search=search)
@@ -58,6 +61,7 @@ def update_courier(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    ensure_advanced_feature_access(current_user, "Courier management")
     service = CourierService(db)
     courier = service.get_by_id(current_user=current_user, courier_id=courier_id)
     if not courier:
@@ -71,6 +75,7 @@ def delete_courier(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    ensure_advanced_feature_access(current_user, "Courier management")
     service = CourierService(db)
     courier = service.get_by_id(current_user=current_user, courier_id=courier_id)
     if not courier:
@@ -85,6 +90,7 @@ def create_adjustment(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    ensure_advanced_feature_access(current_user, "Courier management")
     return CourierService(db).create_adjustment(current_user=current_user, data=data)
 
 
@@ -95,6 +101,7 @@ def update_adjustment(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    ensure_advanced_feature_access(current_user, "Courier management")
     return CourierService(db).update_adjustment(
         current_user=current_user,
         adjustment_id=adjustment_id,
@@ -108,6 +115,7 @@ def delete_adjustment(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    ensure_advanced_feature_access(current_user, "Courier management")
     CourierService(db).delete_adjustment(current_user=current_user, adjustment_id=adjustment_id)
     return None
 
@@ -119,6 +127,7 @@ def get_couriers_summary(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    ensure_advanced_feature_access(current_user, "Courier management")
     service = CourierService(db)
     resolved_date = target_date or datetime.now().date()
     return service.get_summary(

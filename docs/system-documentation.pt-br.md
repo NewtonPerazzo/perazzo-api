@@ -21,23 +21,37 @@ O backend é isolado por loja. A maioria das entidades autenticadas pertence a u
 
 ## Fluxo de Autenticação e Criação de Conta
 
-A criação de conta começa em `POST /api/v1/auth/register`, implementado em `app/api/v1/routers/auth.py`. O router recebe `UserCreate`, chama `UserService.create()` em `app/services/user.py`, cria o hash da senha via `app/core/security.py`, salva o usuário, gera um token de verificação de email com `create_email_verification_token()` em `app/util/jwt.py`, salva apenas o hash HMAC desse token com `app/util/token_hash.py` e envia o link por `send_email_verification_email()` em `app/services/email.py`. O token bruto de verificação nunca é retornado pela API.
+A criação de conta começa em `POST /api/v1/auth/register`, implementado em `app/api/v1/routers/auth.py`. O router recebe `UserCreate`, chama `UserService.create()` em `app/services/user.py`, cria o hash da senha via `app/core/security.py`, salva o usuário e associa o plano padrão `free`. A verificação por email está fora do fluxo de cadastro por enquanto; email é usado apenas para redefinição de senha.
 
 O login usa `POST /api/v1/auth/login`. O router chama `UserService.authenticate()`, que busca o usuário por email e valida a senha. Se estiver correto, o router retorna um bearer token criado por `create_access_token()`. O payload do token guarda o id do usuário em `sub`.
 
 Endpoints protegidos dependem de `get_current_user()` em `app/core/dependencies.py`. Essa dependência lê o header `Authorization: Bearer <token>`, decodifica o token com `decode_access_token()`, valida o UUID em `sub` e carrega o usuário com `UserService.get_by_id()`.
 
-A verificação de email é feita por `POST /api/v1/auth/email/verify`. O endpoint decodifica o token de email, carrega o usuário, valida o token contra o hash salvo, marca `is_email_verified=True` e limpa `email_verification_token`.
+A verificação de email ainda existe em `POST /api/v1/auth/email/verify` para reativação futura. O endpoint decodifica o token de email, carrega o usuário, valida o token contra o hash salvo, marca `is_email_verified=True` e limpa `email_verification_token`.
 
 A recuperação de senha usa `POST /api/v1/auth/password/forgot` para gerar um `reset_password_token`, salvar apenas o hash HMAC desse token no usuário e enviar o email de redefinição de senha. O endpoint fica em `app/api/v1/routers/auth.py`; ele chama `create_password_reset_token()` de `app/util/jwt.py` e `send_password_reset_email()` de `app/services/email.py`. A API nunca retorna o token para o cliente. Ela retorna uma mensagem genérica para impedir que alguém descubra se um email está cadastrado.
 
-Os links de redefinição são montados a partir de `FRONTEND_URL` e apontam para `/reset-password?token=<token>`. As configurações SMTP são carregadas em `app/core/config.py` pelas variáveis `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME` e `SMTP_USE_TLS`. Em desenvolvimento local, se SMTP não estiver configurado, `app/services/email.py` escreve o link de reset no log da API em vez de retorná-lo na resposta HTTP. Em produção, o SMTP deve ser configurado pelas variáveis de ambiente do Render, por exemplo usando Resend.
+Os links de redefinição são montados a partir de `FRONTEND_URL` e apontam para `/reset-password?token=<token>`. As configurações SMTP são carregadas em `app/core/config.py` pelas variáveis `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME` e `SMTP_USE_TLS`. Se SMTP não estiver configurado ou se o envio falhar, `app/services/email.py` lança `EmailDeliveryError`; tokens de reset não são retornados em respostas HTTP nem escritos em log.
 
 Em produção, `FRONTEND_URL` e `BACKEND_CORS_ORIGINS` devem incluir `https://perazzo-manager.vercel.app`.
 
 `POST /api/v1/auth/password/reset` recebe o token e a nova senha, decodifica o token com `decode_password_reset_token()`, valida se ele corresponde ao último hash salvo, valida as regras da senha com `validate_password_rules()`, substitui o hash da senha com `hash_password()`, limpa `reset_password_token` e salva a alteração. Login e recuperação de senha também usam limites simples de requisição em `app/core/rate_limit.py`.
 
 A atualização do perfil usa `PUT /api/v1/auth/me`, exige autenticação e delega para `UserService.update()`.
+
+## Planos e Regras de Assinatura
+
+As regras de planos ficam centralizadas em `app/core/plans.py`. Os planos disponíveis são `free`, `essential` e `pro`, expostos em `PLAN_CATALOG` com preço, duração, limite mensal de pedidos, duração do teste de recursos avançados e flags de recursos. Os helpers incluem `is_free()`, `is_essential()`, `is_pro()`, `get_plan()`, `serialize_plan()`, `ensure_monthly_order_limit()` e `ensure_advanced_feature_access()`.
+
+Novos usuários são criados no plano `free` por `UserService.create()` em `app/services/user.py`. A tabela `users` armazena `plan` e `plan_started_at`, adicionados por `migrations/versions/ab2c3d4e5f6a_add_user_plan_fields.py`. `GET /api/v1/auth/me` retorna `plan`, `plan_started_at` e `plan_details`. `GET /api/v1/plans` retorna o catálogo público de planos.
+
+Limites atuais:
+
+- Free: R$0, conta sem expiração, 10 pedidos por mês, catálogo ilimitado, pedidos por WhatsApp/edição de pedidos/caixa/entregadores liberados por 7 dias após `plan_started_at`.
+- Essential: R$25 por 30 dias, 50 pedidos por mês, recursos avançados ilimitados.
+- Pro: R$50 por 30 dias, pedidos e recursos avançados ilimitados.
+
+O bloqueio acontece no backend. `OrderService.create()` em `app/services/order.py` chama `ensure_monthly_order_limit()` para pedidos autenticados e pedidos vindos do catálogo público. `OrderService.update()` bloqueia edição de pedidos sem acesso a recursos avançados. `app/api/v1/routers/cash_register.py` e `app/api/v1/routers/courier.py` bloqueiam caixa e entregadores sem acesso a recursos avançados. `StoreService.create()` e `StoreService.update()` bloqueiam ativar envio de pedidos por WhatsApp sem acesso a recursos avançados, e a serialização da loja desativa essa flag para Free com teste expirado.
 
 ## Fluxo de Loja
 

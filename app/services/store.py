@@ -1,6 +1,7 @@
 import uuid
 from fastapi import HTTPException, status
 
+from app.core.plans import ensure_advanced_feature_access, user_has_advanced_features
 from app.domain.models.store import Store
 from app.domain.repositories.store import StoreRepository
 from app.schemas.store import StoreCreate, StoreUpdate
@@ -29,6 +30,9 @@ class StoreService:
       )
 
     slug = generate_unique_slug(data.name, self.repository.get_by_slug)
+    accept_whatsapp_orders = data.is_accepted_send_order_to_whatsapp
+    if accept_whatsapp_orders:
+      ensure_advanced_feature_access(current_user, "WhatsApp orders")
 
     store = Store(
       name=data.name,
@@ -44,15 +48,18 @@ class StoreService:
       logo=data.logo,
       color=data.color,
       has_catalog_active=data.has_catalog_active,
-      is_accepted_send_order_to_whatsapp=data.is_accepted_send_order_to_whatsapp,
+      is_accepted_send_order_to_whatsapp=accept_whatsapp_orders,
       business_hours=self._validate_and_normalize_business_hours(data.business_hours),
       user_id=current_user.id
     )
 
     return self.repository.create(store)
 
-  def update(self, store: Store, data: StoreUpdate):
+  def update(self, store: Store, data: StoreUpdate, current_user=None):
     update_data = data.model_dump(exclude_unset=True)
+
+    if update_data.get("is_accepted_send_order_to_whatsapp") is True and current_user is not None:
+      ensure_advanced_feature_access(current_user, "WhatsApp orders")
 
     if "name" in update_data and update_data["name"] and update_data["name"] != store.name:
       store.slug = generate_unique_slug(update_data["name"], self.repository.get_by_slug)
@@ -92,6 +99,11 @@ class StoreService:
     return self.repository.update(store)
 
   def serialize(self, store: Store) -> dict:
+    user = getattr(store, "user", None)
+    whatsapp_orders_enabled = bool(store.is_accepted_send_order_to_whatsapp)
+    if user is not None and not user_has_advanced_features(user):
+      whatsapp_orders_enabled = False
+
     return {
       "id": store.id,
       "name": store.name,
@@ -107,7 +119,7 @@ class StoreService:
       "logo": store.logo,
       "color": store.color,
       "has_catalog_active": store.has_catalog_active,
-      "is_accepted_send_order_to_whatsapp": store.is_accepted_send_order_to_whatsapp,
+      "is_accepted_send_order_to_whatsapp": whatsapp_orders_enabled,
       "business_hours": normalize_business_hours(store.business_hours),
       "is_open_now": self.is_open_now(store),
       "created_at": store.created_at,

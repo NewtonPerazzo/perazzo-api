@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.plans import user_has_advanced_features
 from app.core.rate_limit import catalog_cart_rate_limit
 from app.schemas.cart import CartCreate, CartProductsReplace
 from app.schemas.catalog import (
@@ -46,6 +47,11 @@ def _get_active_store_or_404(store_slug: str, db: Session):
 
 
 def _serialize_store(store) -> CatalogStoreResponse:
+    user = getattr(store, "user", None)
+    whatsapp_orders_enabled = bool(store.is_accepted_send_order_to_whatsapp)
+    if user is not None and not user_has_advanced_features(user):
+        whatsapp_orders_enabled = False
+
     return CatalogStoreResponse(
         id=store.id,
         name=store.name,
@@ -58,7 +64,7 @@ def _serialize_store(store) -> CatalogStoreResponse:
         email=store.email,
         logo=store.logo,
         color=store.color,
-        is_accepted_send_order_to_whatsapp=store.is_accepted_send_order_to_whatsapp,
+        is_accepted_send_order_to_whatsapp=whatsapp_orders_enabled,
         business_hours=normalize_business_hours(store.business_hours),
         is_open_now=is_open_now(store.business_hours),
     )
@@ -473,7 +479,7 @@ def checkout_catalog_cart(
     order = order_service.create(data=order_payload, store_id=store.id)
     response = order_service.serialize(order)
 
-    cart_service.delete(cart)
+    cart_service.delete(cart, store_id=store.id)
 
     return response
 

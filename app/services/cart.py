@@ -47,7 +47,7 @@ class CartService:
         self.db.add(cart)
         self.db.commit()
         self.db.refresh(cart)
-        return self.get_by_id(cart.id)
+        return self.get_by_id(cart.id, store_id=scope_store_id)
 
     def get_by_id(self, cart_id: uuid.UUID, *, current_user=None, store_id: uuid.UUID | None = None) -> Cart | None:
         scope_store_id = self._resolve_store_id(current_user=current_user, store_id=store_id)

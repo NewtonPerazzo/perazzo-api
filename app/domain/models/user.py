@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, String, Boolean, Date, DateTime
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
@@ -23,6 +24,8 @@ class User(Base):
 
   is_active = Column(Boolean, default=True)
   is_email_verified = Column(Boolean, default=False)
+  plan = Column(String(30), nullable=False, default="free")
+  plan_started_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
   email_verification_token = Column(String, nullable=True)
   reset_password_token = Column(String, nullable=True)
