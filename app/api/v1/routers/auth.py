@@ -8,11 +8,11 @@ from app.core.database import get_db
 from app.domain.models.user import User
 from app.schemas.user import UserCreate, UserLogin, UserUpdate, UserResponse
 from app.services.user import UserService
-from app.util.jwt import create_access_token, create_email_verification_token, decode_email_verification_token, create_password_reset_token, decode_password_reset_token
+from app.util.jwt import create_access_token, decode_email_verification_token, create_password_reset_token, decode_password_reset_token
 from app.core.dependencies import get_current_user
 from app.core.rate_limit import login_rate_limit, password_recovery_rate_limit
 from app.core.security import hash_password
-from app.services.email import EmailDeliveryError, send_email_verification_email, send_password_reset_email
+from app.services.email import EmailDeliveryError, send_password_reset_email
 from app.util.token_hash import hash_token, verify_token_hash
 from app.util.password import validate_password_rules
 
@@ -27,6 +27,9 @@ def login(data: UserLogin, request: Request, db: Session = Depends(get_db)):
 
   if not user:
       raise HTTPException(status_code=401, detail="Invalid credentials")
+  
+  if not user.is_active:
+      raise HTTPException(status_code=403, detail="User is inactive")
 
   token = create_access_token({"sub": str(user.id)})
 
@@ -42,19 +45,10 @@ def register(data: UserCreate, db: Session = Depends(get_db)):
         user = service.create(data)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    
-    token = create_email_verification_token({"sub": str(user.id)})
-    user.email_verification_token = hash_token(token, settings.EMAIL_SECRET_KEY)
-    db.commit()
 
-    try:
-        send_email_verification_email(user.email, token)
-    except EmailDeliveryError:
-        user.email_verification_token = None
-        db.commit()
-        raise HTTPException(status_code=503, detail="Could not send email verification email")
+    db.commit()
     
-    return {"id": user.id, "email": user.email, "message": "Account created. Check your email to verify your account"}
+    return {"id": user.id, "email": user.email, "message": "Account created successfully"}
 
 
 @router.post("/email/verify")

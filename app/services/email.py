@@ -24,8 +24,8 @@ def build_email_verification_url(token: str) -> str:
 
 def _send_email(to_email: str, subject: str, body: str) -> None:
     if not settings.SMTP_HOST or not settings.SMTP_FROM_EMAIL or (settings.SMTP_USER and not settings.SMTP_PASSWORD):
-        logger.warning("SMTP is not configured. Email to %s was not sent. Body: %s", to_email, body)
-        return
+        logger.warning("SMTP is not configured. Email to %s was not sent.", to_email)
+        raise EmailDeliveryError("Email service is not configured")
 
     message = EmailMessage()
     message["Subject"] = subject

@@ -27,11 +27,12 @@ class UserService:
         email=data.email,
         password=hash_password(data.password),
         birth_date=data.birth_date,
-        photo=data.photo
+        photo=data.photo,
+        is_email_verified=True
     )
 
     self.db.add(user)
-    self.db.commit()
+    self.db.flush()
     self.db.refresh(user)
 
     return user
