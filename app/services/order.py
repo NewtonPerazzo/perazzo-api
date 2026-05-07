@@ -16,14 +16,14 @@ from app.domain.models.order import Order
 from app.domain.models.order_item import OrderItem
 from app.domain.models.product import Product
 from app.services.courier import CourierService
-from app.services.store import StoreService
+from app.services.store_scope import StoreScopedService
 from app.schemas.order import OrderCreate, OrderUpdate, ProductOrderCreate
 from app.util.calculations import calculate_order_item_total, calculate_order_total
 
 LOCAL_TIMEZONE = "America/Sao_Paulo"
 
 
-class OrderService:
+class OrderService(StoreScopedService):
     def __init__(self, db: Session):
         self.db = db
 
@@ -87,8 +87,7 @@ class OrderService:
         plan_user = current_user or get_store_owner(self.db, scope_store_id)
         if plan_user:
             ensure_advanced_feature_access(plan_user, "Order editing")
-        if order.store_id != scope_store_id:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+        self._assert_store_scope(order, scope_store_id, "Order not found")
         products_by_id = self._get_products_map([item.product_id for item in data.products], store_id=scope_store_id)
         delivery_method = self._resolve_delivery_method(
             is_to_deliver=data.is_to_deliver,
@@ -122,8 +121,7 @@ class OrderService:
 
     def delete(self, order: Order, *, current_user=None, store_id: uuid.UUID | None = None) -> None:
         scope_store_id = self._resolve_store_id(current_user=current_user, store_id=store_id)
-        if order.store_id != scope_store_id:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+        self._assert_store_scope(order, scope_store_id, "Order not found")
         if order.status == "deliveried":
             self._decrement_customer_sales(order.customer, order.total_price)
 
@@ -138,8 +136,7 @@ class OrderService:
         plan_user = current_user or get_store_owner(self.db, scope_store_id)
         if plan_user:
             ensure_advanced_feature_access(plan_user, "Order editing")
-        if order.store_id != scope_store_id:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+        self._assert_store_scope(order, scope_store_id, "Order not found")
         previous_status = order.status
 
         if previous_status != status_value and status_value in {"confirmed", "deliveried"} and not order.is_stock_reduced:
@@ -250,6 +247,29 @@ class OrderService:
                 .selectinload(Product.categories)
             )
             .where(Order.id == order_id, Order.store_id == scope_store_id)
+        )
+        return self.db.execute(stmt).scalar_one_or_none()
+
+    def get_by_order_number(
+        self,
+        order_number: str,
+        *,
+        current_user=None,
+        store_id: uuid.UUID | None = None,
+    ) -> Order | None:
+        scope_store_id = self._resolve_store_id(current_user=current_user, store_id=store_id)
+        normalized_order_number = order_number if order_number.startswith("#") else f"#{order_number}"
+        stmt = (
+            select(Order)
+            .options(
+                selectinload(Order.customer),
+                selectinload(Order.delivery_method),
+                selectinload(Order.courier),
+                selectinload(Order.items)
+                .joinedload(OrderItem.product)
+                .selectinload(Product.categories)
+            )
+            .where(Order.order_number == normalized_order_number, Order.store_id == scope_store_id)
         )
         return self.db.execute(stmt).scalar_one_or_none()
 
@@ -471,13 +491,3 @@ class OrderService:
             if product.stock is None:
                 continue
             product.stock = int(product.stock + item.amount)
-
-    def _resolve_store_id(self, *, current_user=None, store_id: uuid.UUID | None = None) -> uuid.UUID:
-        if store_id:
-            return store_id
-        if not current_user:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Store scope is required")
-        store = StoreService(self.db).get_by_user_id(current_user.id)
-        if not store:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Store not found")
-        return store.id

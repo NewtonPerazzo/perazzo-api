@@ -9,12 +9,12 @@ from sqlalchemy.orm import selectinload
 from app.domain.models.cart_item import CartItem
 from app.domain.models.category import Category
 from app.domain.models.product import Product
-from app.services.store import StoreService
+from app.services.store_scope import StoreScopedService
 from app.schemas.product import ProductCreate, ProductUpdate
 from app.util.slug import generate_unique_slug
 
 
-class ProductService:
+class ProductService(StoreScopedService):
 
   def __init__(self, db: Session):
     self.db = db
@@ -129,8 +129,7 @@ class ProductService:
 
   def update(self, product: Product, data: ProductUpdate, *, current_user=None, store_id: uuid.UUID | None = None) -> Product:
     scope_store_id = self._resolve_store_id(current_user=current_user, store_id=store_id)
-    if product.store_id != scope_store_id:
-      raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    self._assert_store_scope(product, scope_store_id, "Product not found")
 
     if data.name and data.name != product.name:
         product.slug = generate_unique_slug(data.name, lambda value: self.get_by_slug(value, store_id=scope_store_id))
@@ -154,8 +153,7 @@ class ProductService:
 
   def delete(self, product: Product, *, current_user=None, store_id: uuid.UUID | None = None) -> None:
     scope_store_id = self._resolve_store_id(current_user=current_user, store_id=store_id)
-    if product.store_id != scope_store_id:
-      raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    self._assert_store_scope(product, scope_store_id, "Product not found")
     product.is_active = False
     self.db.execute(delete(CartItem).where(CartItem.product_id == product.id))
     self.db.commit()
@@ -225,13 +223,3 @@ class ProductService:
       )
 
     return categories
-
-  def _resolve_store_id(self, *, current_user=None, store_id: uuid.UUID | None = None) -> uuid.UUID:
-    if store_id:
-      return store_id
-    if not current_user:
-      raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Store scope is required")
-    store = StoreService(self.db).get_by_user_id(current_user.id)
-    if not store:
-      raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Store not found")
-    return store.id

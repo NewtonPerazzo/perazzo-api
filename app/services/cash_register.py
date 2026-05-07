@@ -9,18 +9,16 @@ from sqlalchemy.orm import Session
 from app.domain.models.cash_register_entry import CashRegisterEntry
 from app.domain.models.order import Order
 from app.domain.models.order_item import OrderItem
-from app.services.store import StoreService
+from app.services.store_scope import StoreScopedService
 from app.schemas.cash_register import CashPeriodView, CashRegisterEntryCreate, CashRegisterEntryUpdate
 
 
-class CashRegisterService:
+class CashRegisterService(StoreScopedService):
     def __init__(self, db: Session):
         self.db = db
 
     def create_entry(self, current_user, data: CashRegisterEntryCreate) -> CashRegisterEntry:
-        store = StoreService(self.db).get_by_user_id(current_user.id)
-        if not store:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Store not found")
+        store = self._get_store_or_404(current_user)
 
         entry = CashRegisterEntry(
             store_id=store.id,
@@ -44,9 +42,7 @@ class CashRegisterService:
         entry_id: uuid.UUID,
         data: CashRegisterEntryUpdate,
     ) -> CashRegisterEntry:
-        store = StoreService(self.db).get_by_user_id(current_user.id)
-        if not store:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Store not found")
+        store = self._get_store_or_404(current_user)
 
         entry = self.get_entry(entry_id=entry_id, store_id=store.id)
         if not entry:
@@ -73,9 +69,7 @@ class CashRegisterService:
         return self.db.execute(stmt).scalar_one_or_none()
 
     def delete_entry(self, current_user, entry_id: uuid.UUID) -> None:
-        store = StoreService(self.db).get_by_user_id(current_user.id)
-        if not store:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Store not found")
+        store = self._get_store_or_404(current_user)
 
         entry = self.get_entry(entry_id=entry_id, store_id=store.id)
         if not entry:
@@ -85,9 +79,7 @@ class CashRegisterService:
         self.db.commit()
 
     def get_summary(self, current_user, target_date: date, period_view: CashPeriodView):
-        store = StoreService(self.db).get_by_user_id(current_user.id)
-        if not store:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Store not found")
+        store = self._get_store_or_404(current_user)
 
         period_start, period_end = self._resolve_period_range(target_date=target_date, period_view=period_view)
 

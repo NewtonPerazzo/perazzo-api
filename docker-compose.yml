@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
 
   db:
@@ -35,6 +33,26 @@ services:
       - .:/app
     command: >
       sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  manager:
+    build:
+      context: ../perazzo-manager
+    container_name: perazzo_manager
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      PERAZZO_INTERNAL_API_URL: http://api:8000/api/v1
+      NEXT_PUBLIC_PERAZZO_API_URL: http://localhost:8001/api/v1
+      NEXT_TELEMETRY_DISABLED: "1"
+      WATCHPACK_POLLING: "true"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../perazzo-manager:/app
+      - /app/node_modules
+      - /app/.next
+    command: npm run dev -- --hostname 0.0.0.0
 
 volumes:
   postgres_data:

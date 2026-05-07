@@ -12,11 +12,11 @@ from app.domain.models.product import Product
 from app.schemas.cart import CartCreate, CartPatch, ProductCartCreate
 from app.schemas.order import OrderCreate, ProductOrderCreate
 from app.services.order import OrderService
-from app.services.store import StoreService
+from app.services.store_scope import StoreScopedService
 from app.util.calculations import calculate_order_item_total, calculate_order_total
 
 
-class CartService:
+class CartService(StoreScopedService):
     def __init__(self, db: Session):
         self.db = db
 
@@ -101,8 +101,7 @@ class CartService:
 
     def replace_products(self, cart: Cart, products: List[ProductCartCreate], *, current_user=None, store_id: uuid.UUID | None = None) -> Cart | None:
         scope_store_id = self._resolve_store_id(current_user=current_user, store_id=store_id)
-        if cart.store_id != scope_store_id:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cart not found")
+        self._assert_store_scope(cart, scope_store_id, "Cart not found")
         if len(products) == 0:
             self.db.delete(cart)
             self.db.commit()
@@ -122,8 +121,7 @@ class CartService:
 
     def checkout(self, cart: Cart, *, current_user=None, store_id: uuid.UUID | None = None) -> dict:
         scope_store_id = self._resolve_store_id(current_user=current_user, store_id=store_id)
-        if cart.store_id != scope_store_id:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cart not found")
+        self._assert_store_scope(cart, scope_store_id, "Cart not found")
         if not cart.items:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cart has no products")
         if not cart.customer_name or not cart.customer_phone:
@@ -231,20 +229,9 @@ class CartService:
         products = self.db.execute(stmt).scalars().all()
         return {product.id: product for product in products}
 
-    def _resolve_store_id(self, *, current_user=None, store_id: uuid.UUID | None = None) -> uuid.UUID:
-        if store_id:
-            return store_id
-        if not current_user:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Store scope is required")
-        store = StoreService(self.db).get_by_user_id(current_user.id)
-        if not store:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Store not found")
-        return store.id
-
     def _assert_cart_scope(self, cart: Cart, *, current_user=None, store_id: uuid.UUID | None = None) -> None:
         scope_store_id = self._resolve_store_id(current_user=current_user, store_id=store_id)
-        if cart.store_id != scope_store_id:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cart not found")
+        self._assert_store_scope(cart, scope_store_id, "Cart not found")
 
     def _ensure_stock_available(self, product: Product, requested_amount: int) -> None:
         if requested_amount <= 0:

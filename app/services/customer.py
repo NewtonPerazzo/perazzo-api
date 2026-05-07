@@ -5,15 +5,14 @@ from sqlalchemy.orm import Session
 
 from app.domain.models.customer import Customer
 from app.domain.models.order import Order
-from app.services.store import StoreService
-from fastapi import HTTPException, status
+from app.services.store_scope import StoreScopedService
 from app.schemas.customer import CustomerCreate, CustomerUpdate
 
 DELETED_CUSTOMER_EMAIL = "deleted-customer@perazzo.com"
 LEGACY_DELETED_CUSTOMER_EMAIL = "deleted-customer@perazzo.local"
 
 
-class CustomerService:
+class CustomerService(StoreScopedService):
     def __init__(self, db: Session):
         self.db = db
 
@@ -189,13 +188,3 @@ class CustomerService:
             "orders_count": orders_count,
             "created_at": customer.created_at,
         }
-
-    def _resolve_store_id(self, *, current_user=None, store_id: uuid.UUID | None = None) -> uuid.UUID:
-        if store_id:
-            return store_id
-        if not current_user:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Store scope is required")
-        store = StoreService(self.db).get_by_user_id(current_user.id)
-        if not store:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Store not found")
-        return store.id

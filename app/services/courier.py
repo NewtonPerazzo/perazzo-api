@@ -18,10 +18,10 @@ from app.schemas.courier import (
     CourierPeriodView,
     CourierUpdate,
 )
-from app.services.store import StoreService
+from app.services.store_scope import StoreScopedService
 
 
-class CourierService:
+class CourierService(StoreScopedService):
     def __init__(self, db: Session):
         self.db = db
 
@@ -294,12 +294,6 @@ class CourierService:
         if not courier:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Courier not found")
         return courier
-
-    def _get_store_or_404(self, current_user):
-        store = StoreService(self.db).get_by_user_id(current_user.id)
-        if not store:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Store not found")
-        return store
 
     def _normalize_text(self, value: str | None) -> str | None:
         if value is None:

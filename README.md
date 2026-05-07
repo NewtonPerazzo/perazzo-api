@@ -28,7 +28,7 @@ The API is built with FastAPI and PostgreSQL, and is designed to run locally wit
 - `app/services`: business logic.
 - `app/util`: shared utility functions.
 - `migrations`: Alembic migration environment and migration files.
-- `docker-compose.yml`: local API and PostgreSQL setup.
+- `docker-compose.yml`: local PostgreSQL, API, and frontend setup.
 - `Dockerfile`: API container image.
 
 ## Environment Variables
@@ -87,8 +87,9 @@ Prerequisites:
 - Docker Desktop installed and running.
 - Port `5433` available for PostgreSQL.
 - Port `8001` available for the API.
+- Port `3000` available for the frontend.
 
-Start the database and API:
+Start the database, API, and frontend:
 
 ```powershell
 docker compose up --build -d
@@ -100,7 +101,14 @@ Follow API logs:
 docker compose logs -f api
 ```
 
+Follow frontend logs:
+
+```powershell
+docker compose logs -f manager
+```
+
 The API container waits for PostgreSQL, runs Alembic migrations, and then starts Uvicorn.
+The frontend container starts Next.js in development mode and consumes the API at `http://localhost:8001/api/v1`.
 
 Check the health endpoint:
 
@@ -117,6 +125,7 @@ Expected response:
 ## Local URLs
 
 - API: `http://localhost:8001`
+- Frontend: `http://localhost:3000`
 - Healthcheck: `http://localhost:8001/health`
 - API v1 prefix: `http://localhost:8001/api/v1`
 - PostgreSQL: `localhost:5433`
@@ -145,6 +154,12 @@ Open a shell inside the API container:
 
 ```powershell
 docker compose exec api sh
+```
+
+Open a shell inside the frontend container:
+
+```powershell
+docker compose exec manager sh
 ```
 
 ## Frontend Integration

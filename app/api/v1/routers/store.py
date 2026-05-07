@@ -38,13 +38,7 @@ def update_my_store(
   current_user = Depends(get_current_user)
 ):
   service = StoreService(db)
-  store = service.get_by_user_id(current_user.id)
-
-  if not store:
-    raise HTTPException(
-      status_code=status.HTTP_404_NOT_FOUND,
-      detail="Store not found"
-    )
+  store = service.get_by_current_user_or_404(current_user)
 
   updated = service.update(store, data, current_user=current_user)
   return service.serialize(updated)
@@ -59,13 +53,7 @@ def get_my_store(
   current_user = Depends(get_current_user)
 ):
   service = StoreService(db)
-  store = service.get_by_user_id(current_user.id)
-
-  if not store:
-    raise HTTPException(
-      status_code=status.HTTP_404_NOT_FOUND,
-      detail="Store not found"
-    )
+  store = service.get_by_current_user_or_404(current_user)
 
   return service.serialize(store)
 
@@ -80,13 +68,7 @@ def toggle_today_open(
   current_user = Depends(get_current_user)
 ):
   service = StoreService(db)
-  store = service.get_by_user_id(current_user.id)
-
-  if not store:
-    raise HTTPException(
-      status_code=status.HTTP_404_NOT_FOUND,
-      detail="Store not found"
-    )
+  store = service.get_by_current_user_or_404(current_user)
 
   updated = service.toggle_today_open(store=store, should_open=data.should_open)
   return service.serialize(updated)

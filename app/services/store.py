@@ -80,6 +80,15 @@ class StoreService:
   def get_by_user_id(self, user_id: uuid.UUID):
     return self.repository.get_by_user_id(user_id)
 
+  def get_by_current_user_or_404(self, current_user) -> Store:
+    store = self.get_by_user_id(current_user.id)
+    if not store:
+      raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Store not found"
+      )
+    return store
+
   def is_open_now(self, store: Store) -> bool:
     return is_open_now(store.business_hours)
 
@@ -91,8 +100,8 @@ class StoreService:
     day_item = hours.get(day_key, {})
     hours[day_key] = {
       "enabled": should_open,
-      "start_time": day_item.get("start_time"),
-      "end_time": day_item.get("end_time"),
+      "start_time": day_item.get("start_time") or ("00:00" if should_open else None),
+      "end_time": day_item.get("end_time") or ("23:59" if should_open else None),
     }
     validate_business_hours(hours)
     store.business_hours = hours

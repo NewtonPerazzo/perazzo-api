@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from app.schemas.order import OrderResponse
+
 
 class CatalogStoreResponse(BaseModel):
     id: UUID
@@ -16,6 +18,8 @@ class CatalogStoreResponse(BaseModel):
     email: EmailStr | None
     logo: str | None
     color: str | None
+    does_delivery: bool
+    does_pick_up: bool
     is_accepted_send_order_to_whatsapp: bool
     business_hours: dict
     is_open_now: bool
@@ -64,6 +68,11 @@ class CatalogProductPageResponse(BaseModel):
     product: CatalogProductResponse
 
 
+class CatalogOrderPageResponse(BaseModel):
+    store: CatalogStoreResponse
+    order: OrderResponse
+
+
 class CatalogCartProductResponse(BaseModel):
     product: CatalogProductResponse
     amount: int
@@ -99,6 +108,13 @@ class CatalogCartPreviewTotalRequest(BaseModel):
 
 class CatalogCartPreviewTotalResponse(BaseModel):
     total_price: float
+
+
+class CatalogOrderStatusResponse(BaseModel):
+    id: UUID
+    order_number: str
+    status: str
+    updated_at: datetime
 
 
 class CatalogCheckoutCustomerInput(BaseModel):

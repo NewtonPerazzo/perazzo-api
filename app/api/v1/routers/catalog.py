@@ -15,6 +15,8 @@ from app.schemas.catalog import (
     CatalogCategoryResponse,
     CatalogHomeResponse,
     CatalogHomeSectionResponse,
+    CatalogOrderPageResponse,
+    CatalogOrderStatusResponse,
     CatalogProductPageResponse,
     CatalogProductResponse,
     CatalogProductsPageResponse,
@@ -64,6 +66,8 @@ def _serialize_store(store) -> CatalogStoreResponse:
         email=store.email,
         logo=store.logo,
         color=store.color,
+        does_delivery=store.does_delivery,
+        does_pick_up=store.does_pick_up,
         is_accepted_send_order_to_whatsapp=whatsapp_orders_enabled,
         business_hours=normalize_business_hours(store.business_hours),
         is_open_now=is_open_now(store.business_hours),
@@ -296,6 +300,43 @@ def get_catalog_product(
         store=_serialize_store(store),
         product=_serialize_product(product),
     )
+
+
+@router.get("/{store_slug}/orders/{order_id}/status", response_model=CatalogOrderStatusResponse)
+def get_catalog_order_status(
+    store_slug: str,
+    order_id: uuid.UUID,
+    db: Session = Depends(get_db),
+):
+    store = _get_active_store_or_404(store_slug, db)
+    order = OrderService(db).get_by_id(order_id, store_id=store.id)
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+
+    return {
+        "id": order.id,
+        "order_number": order.order_number,
+        "status": order.status,
+        "updated_at": order.updated_at,
+    }
+
+
+@router.get("/{store_slug}/orders/by-number/{order_number}", response_model=CatalogOrderPageResponse)
+def get_catalog_order_by_number(
+    store_slug: str,
+    order_number: str,
+    db: Session = Depends(get_db),
+):
+    store = _get_active_store_or_404(store_slug, db)
+    service = OrderService(db)
+    order = service.get_by_order_number(order_number, store_id=store.id)
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+
+    return {
+        "store": _serialize_store(store),
+        "order": service.serialize(order),
+    }
 
 
 @router.get("/{store_slug}/categories/{category_slug}", response_model=CatalogProductsPageResponse)

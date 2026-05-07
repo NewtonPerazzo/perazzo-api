@@ -5,11 +5,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domain.models.payment_method import PaymentMethod
-from app.services.store import StoreService
+from app.services.store_scope import StoreScopedService
 from app.schemas.payment_method import PaymentMethodCreate, PaymentMethodUpdate
 
 
-class PaymentMethodService:
+class PaymentMethodService(StoreScopedService):
     def __init__(self, db: Session):
         self.db = db
 
@@ -49,8 +49,7 @@ class PaymentMethodService:
 
     def update(self, payment_method: PaymentMethod, data: PaymentMethodUpdate, *, current_user=None, store_id: uuid.UUID | None = None) -> PaymentMethod:
         scope_store_id = self._resolve_store_id(current_user=current_user, store_id=store_id)
-        if payment_method.store_id != scope_store_id:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment method not found")
+        self._assert_store_scope(payment_method, scope_store_id, "Payment method not found")
         existing = self.get_by_name(data.name, store_id=scope_store_id)
         if existing and existing.id != payment_method.id:
             raise HTTPException(
@@ -65,17 +64,6 @@ class PaymentMethodService:
 
     def delete(self, payment_method: PaymentMethod, *, current_user=None, store_id: uuid.UUID | None = None) -> None:
         scope_store_id = self._resolve_store_id(current_user=current_user, store_id=store_id)
-        if payment_method.store_id != scope_store_id:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment method not found")
+        self._assert_store_scope(payment_method, scope_store_id, "Payment method not found")
         self.db.delete(payment_method)
         self.db.commit()
-
-    def _resolve_store_id(self, *, current_user=None, store_id: uuid.UUID | None = None) -> uuid.UUID:
-        if store_id:
-            return store_id
-        if not current_user:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Store scope is required")
-        store = StoreService(self.db).get_by_user_id(current_user.id)
-        if not store:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Store not found")
-        return store.id
