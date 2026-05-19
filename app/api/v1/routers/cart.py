@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -8,6 +8,7 @@ from app.core.dependencies import get_current_user
 from app.schemas.cart import CartCreate, CartPatch, CartProductsReplace, CartResponse
 from app.schemas.order import OrderResponse
 from app.services.cart import CartService
+from app.realtime.order_events import publish_order_event
 
 
 router = APIRouter(
@@ -89,6 +90,7 @@ def replace_cart_products(
 @router.post("/{cart_id}/checkout", response_model=OrderResponse)
 def checkout_cart(
     cart_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -96,7 +98,16 @@ def checkout_cart(
     cart = service.get_by_id(cart_id, current_user=current_user)
     if not cart:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cart not found")
-    return service.checkout(cart, current_user=current_user)
+    store_id = cart.store_id
+    response = service.checkout(cart, current_user=current_user)
+    background_tasks.add_task(
+        publish_order_event,
+        event_type="order.created",
+        store_id=store_id,
+        order_number=response["order_number"],
+        order=response,
+    )
+    return response
 
 
 @router.delete("/{cart_id}", status_code=status.HTTP_204_NO_CONTENT)

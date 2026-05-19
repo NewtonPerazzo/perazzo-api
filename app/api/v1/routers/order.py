@@ -1,7 +1,7 @@
 import uuid
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -15,6 +15,7 @@ from app.schemas.order import (
     OrderUpdate,
 )
 from app.services.order import OrderService
+from app.realtime.order_events import publish_order_event
 
 
 router = APIRouter(
@@ -27,11 +28,21 @@ router = APIRouter(
 @router.post("", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
 def create_order(
     data: OrderCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    order = OrderService(db).create(current_user=current_user, data=data)
-    return OrderService(db).serialize(order)
+    service = OrderService(db)
+    order = service.create(current_user=current_user, data=data)
+    response = service.serialize(order)
+    background_tasks.add_task(
+        publish_order_event,
+        event_type="order.created",
+        store_id=order.store_id,
+        order_number=order.order_number,
+        order=response,
+    )
+    return response
 
 
 @router.get("", response_model=list[OrderResponse])
@@ -101,6 +112,7 @@ def get_order(
 def update_order(
     order_id: uuid.UUID,
     data: OrderUpdate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -109,12 +121,21 @@ def update_order(
     if not order:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
     updated = service.update(current_user=current_user, order=order, data=data)
-    return service.serialize(updated)
+    response = service.serialize(updated)
+    background_tasks.add_task(
+        publish_order_event,
+        event_type="order.updated",
+        store_id=updated.store_id,
+        order_number=updated.order_number,
+        order=response,
+    )
+    return response
 
 
 @router.delete("/{order_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_order(
     order_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -122,7 +143,16 @@ def delete_order(
     order = service.get_by_id(order_id, current_user=current_user)
     if not order:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+    store_id = order.store_id
+    order_number = order.order_number
     service.delete(order, current_user=current_user)
+    background_tasks.add_task(
+        publish_order_event,
+        event_type="order.deleted",
+        store_id=store_id,
+        order_number=order_number,
+        order_id=order_id,
+    )
     return None
 
 
@@ -130,6 +160,7 @@ def delete_order(
 def update_order_status(
     order_id: uuid.UUID,
     data: OrderStatusUpdate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -138,4 +169,12 @@ def update_order_status(
     if not order:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
     updated = service.update_status(order, data.status, current_user=current_user)
-    return service.serialize(updated)
+    response = service.serialize(updated)
+    background_tasks.add_task(
+        publish_order_event,
+        event_type="order.status_updated",
+        store_id=updated.store_id,
+        order_number=updated.order_number,
+        order=response,
+    )
+    return response

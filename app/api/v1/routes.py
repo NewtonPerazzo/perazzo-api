@@ -13,6 +13,7 @@ from app.api.v1.routers.payment_method import router as payment_method_router
 from app.api.v1.routers.plans import router as plans_router
 from app.api.v1.routers.product import router as product_router
 from app.api.v1.routers.store import router as store_router
+from app.api.v1.routers.websocket import router as websocket_router
 
 api_router = APIRouter()
 
@@ -29,3 +30,4 @@ api_router.include_router(payment_method_router)
 api_router.include_router(plans_router)
 api_router.include_router(product_router)
 api_router.include_router(store_router)
+api_router.include_router(websocket_router)

@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -32,6 +32,7 @@ from app.services.order import OrderService
 from app.services.payment_method import PaymentMethodService
 from app.services.product import ProductService
 from app.services.store import StoreService
+from app.realtime.order_events import publish_order_event
 from app.util.store_hours import is_open_now, normalize_business_hours
 
 router = APIRouter(prefix="/catalog", tags=["Catalog"])
@@ -472,6 +473,7 @@ def checkout_catalog_cart(
     data: CatalogCartCheckoutRequest,
     cart_secret: str,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     catalog_cart_rate_limit(request)
@@ -519,6 +521,13 @@ def checkout_catalog_cart(
     order_service = OrderService(db)
     order = order_service.create(data=order_payload, store_id=store.id)
     response = order_service.serialize(order)
+    background_tasks.add_task(
+        publish_order_event,
+        event_type="order.created",
+        store_id=store.id,
+        order_number=order.order_number,
+        order=response,
+    )
 
     cart_service.delete(cart, store_id=store.id)
 
